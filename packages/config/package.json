@@ -1,0 +1,6 @@
+{
+  "name": "@peer-tutoring/config",
+  "version": "0.1.0",
+  "private": true,
+  "files": ["typescript", "tailwind", "eslint"]
+}

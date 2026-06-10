@@ -1,0 +1,35 @@
+name: Deploy API to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/api/**'
+      - 'packages/**'
+      - '.github/workflows/deploy-api.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      - name: 'Build and Deploy'
+        run: |
+          # A real build might use docker buildx for monorepos, but this demonstrates the Cloud Run integration
+          gcloud builds submit --tag gcr.io/${{ secrets.GCP_PROJECT_ID }}/tutorly-api .
+          gcloud run deploy tutorly-api \
+            --image gcr.io/${{ secrets.GCP_PROJECT_ID }}/tutorly-api \
+            --platform managed \
+            --region us-central1 \
+            --allow-unauthenticated \
+            --set-env-vars="NODE_ENV=production,REDIS_URL=${{ secrets.REDIS_URL }}"

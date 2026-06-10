@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-inter: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-white text-surface-900 dark:bg-surface-950 dark:text-surface-100;
+    @apply antialiased;
+  }
+
+  * {
+    @apply border-surface-200 dark:border-surface-700;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/70 dark:bg-surface-900/70 backdrop-blur-lg border border-white/20 dark:border-surface-700/30;
+  }
+
+  .gradient-primary {
+    @apply bg-gradient-to-r from-primary-600 to-secondary-500;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary-600 to-secondary-500 bg-clip-text text-transparent;
+  }
+
+  .hover-lift {
+    @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lg;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

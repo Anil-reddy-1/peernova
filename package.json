@@ -2,7 +2,11 @@
   "name": "peer-tutoring",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@10.11.0",
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
@@ -21,6 +25,6 @@
   },
   "engines": {
     "node": ">=20.0.0",
-    "pnpm": ">=10.0.0"
+    "npm": ">=10.0.0"
   }
 }
