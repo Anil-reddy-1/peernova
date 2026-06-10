@@ -9,7 +9,7 @@ import { logger } from './lib/pino';
 import { initializeSocket } from './api/v1/chat/socket';
 
 
-const PORT = parseInt(process.env.API_PORT || '4000', 10);
+const PORT = parseInt(process.env.PORT || process.env.API_PORT || '4000', 10);
 
 async function main() {
   const app = createApp();
