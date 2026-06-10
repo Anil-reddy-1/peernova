@@ -17,6 +17,7 @@ export interface VerificationDocument {
 
 export interface TutorProfile {
   userId: string;
+  displayName?: string;
   bio: string;
   subjects: Subject[];
   hourlyRate: number;

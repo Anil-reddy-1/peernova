@@ -116,6 +116,13 @@ export default function AdminReportsPage() {
           ))}
         </div>
       )}
+      {reports.length > 0 && (
+        <div className="flex items-center justify-between p-4 mt-6 bg-surface-50 dark:bg-surface-900/50 rounded-2xl border border-surface-200 dark:border-surface-800">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-4 py-2 rounded-xl bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 text-sm font-medium disabled:opacity-50 hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors">Previous</button>
+          <span className="text-sm font-medium text-surface-600 dark:text-surface-400">Page {page}</span>
+          <button onClick={() => setPage(p => p + 1)} disabled={reports.length < 20} className="px-4 py-2 rounded-xl bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 text-sm font-medium disabled:opacity-50 hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors">Next</button>
+        </div>
+      )}
     </div>
   );
 }

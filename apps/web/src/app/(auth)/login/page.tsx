@@ -17,9 +17,11 @@ const loginSchema = z.object({
   rememberMe: z.boolean().optional(),
 });
 
+import { Suspense } from 'react';
+
 type LoginForm = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/dashboard';
@@ -320,5 +322,13 @@ export default function LoginPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center p-8">Loading...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

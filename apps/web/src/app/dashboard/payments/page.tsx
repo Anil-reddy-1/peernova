@@ -103,6 +103,13 @@ export default function AdminPaymentsPage() {
             </table>
           </div>
         )}
+        {payments.length > 0 && (
+          <div className="p-4 border-t border-surface-200 dark:border-surface-800 flex items-center justify-between">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1.5 rounded-lg border border-surface-200 dark:border-surface-700 text-sm font-medium disabled:opacity-50 hover:bg-surface-50 dark:hover:bg-surface-800">Previous</button>
+            <span className="text-sm text-surface-500">Page {page}</span>
+            <button onClick={() => setPage(p => p + 1)} disabled={payments.length < 20} className="px-3 py-1.5 rounded-lg border border-surface-200 dark:border-surface-700 text-sm font-medium disabled:opacity-50 hover:bg-surface-50 dark:hover:bg-surface-800">Next</button>
+          </div>
+        )}
       </div>
     </div>
   );

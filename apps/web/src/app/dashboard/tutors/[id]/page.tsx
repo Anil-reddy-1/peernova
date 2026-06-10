@@ -10,7 +10,7 @@ export default function TutorProfilePage() {
   const { id } = useParams() as { id: string };
   const { data: tutor, isLoading: isTutorLoading } = useTutorProfile(id);
   const { data: availability, isLoading: isAvailabilityLoading } = useTutorAvailability(id);
-  const { userProfile, role } = useAuth();
+  const { role } = useAuth();
   const router = useRouter();
 
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export default function TutorProfilePage() {
     if (!selectedSlot || !subject) return alert('Please select a slot and enter a subject');
     try {
       setIsBooking(true);
-      const { data } = await apiClient.post('/v1/sessions', {
+      await apiClient.post('/v1/sessions', {
         tutorId: id,
         slotId: selectedSlot,
         subject,
@@ -47,10 +47,10 @@ export default function TutorProfilePage() {
       {/* Profile Header */}
       <div className="glass-card rounded-2xl p-8 flex flex-col md:flex-row gap-8 items-start">
         <div className="w-24 h-24 rounded-full bg-surface-200 dark:bg-surface-800 flex items-center justify-center text-4xl shrink-0">
-          {tutor.displayName?.charAt(0)}
+          {(tutor as any).displayName?.charAt(0)}
         </div>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold mb-2">{tutor.displayName}</h1>
+          <h1 className="text-3xl font-bold mb-2">{(tutor as any).displayName}</h1>
           <p className="text-surface-600 mb-4">{tutor.bio}</p>
           <div className="flex flex-wrap gap-2 mb-4">
             {tutor.subjects?.map((sub: any) => (
@@ -70,7 +70,7 @@ export default function TutorProfilePage() {
           <button 
             onClick={async () => {
               try {
-                const res = await apiClient.post('/v1/chat/rooms', { participantId: tutor.id, initialMessage: 'Hi' });
+                const res = await apiClient.post('/v1/chat/rooms', { participantId: id, initialMessage: 'Hi' });
                 router.push(`/dashboard/messages?chatId=${res.data.data.id}`);
               } catch(err) {
                 console.error('Failed to create chat', err);

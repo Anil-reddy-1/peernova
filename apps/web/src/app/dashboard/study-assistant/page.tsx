@@ -12,7 +12,7 @@ export default function StudyAssistantPage() {
   const { messages, isTyping, error, sendMessage } = useStreamingChat(conversationId);
   const [input, setInput] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [subjectContext, setSubjectContext] = useState('Mathematics'); // Mock context
+  const subjectContext = 'Mathematics'; // Mock context
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

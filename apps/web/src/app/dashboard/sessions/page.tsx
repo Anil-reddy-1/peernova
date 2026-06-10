@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { format } from 'date-fns';
 
 export default function SessionsPage() {
-  const { userProfile, role } = useAuth();
+  const { role } = useAuth();
   const [activeTab, setActiveTab] = useState<'upcoming' | 'past' | 'cancelled'>('upcoming');
   const { cancelSession, updateStatus } = useSessionActions();
 
@@ -88,7 +88,6 @@ export default function SessionsPage() {
           {filteredSessions.map((session, index) => {
             const isLast = index === filteredSessions.length - 1;
             const startTime = new Date(session.startTime);
-            const endTime = new Date(session.endTime);
             const canJoin = session.status === 'confirmed' || session.status === 'in_progress';
 
             return (

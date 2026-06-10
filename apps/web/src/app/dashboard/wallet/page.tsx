@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useWallet, useTopup } from '@/hooks/usePayments';
 
-import { auth } from '@/lib/firebase-client';
+
 
 export default function WalletPage() {
   const { balance, currency, transactions, isLoading } = useWallet();
@@ -13,7 +13,7 @@ export default function WalletPage() {
   const handleTopup = () => {
     if (!amount || amount <= 0) return alert('Enter a valid amount');
     topup(Number(amount), {
-      onSuccess: (data: any) => {
+      onSuccess: () => {
         alert('Top-up successful!');
         window.location.reload();
       },

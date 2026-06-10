@@ -5,11 +5,11 @@ import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
-import { Input, Select, Spinner, EmptyState } from '@peer-tutoring/ui';
+import { Input, Spinner, EmptyState } from '@peer-tutoring/ui';
 import { Search, UserX } from 'lucide-react';
 
 export default function TutorsPage() {
-  const { role } = useAuth();
+  useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
 
