@@ -1,4 +1,5 @@
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore } from '../../../lib/firebase-admin';
+
 export class AdminService {
   private get db() {
     return getFirestore();

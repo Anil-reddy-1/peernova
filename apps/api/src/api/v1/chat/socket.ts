@@ -1,7 +1,8 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import type { Server as HttpServer } from 'http';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getAuth, getFirestore, getFieldValue } from '../../../lib/firebase-admin';
+const FieldValue = getFieldValue();
+
 import { logger } from '../../../lib/pino';
 import { v4 as uuidv4 } from 'uuid';
 

@@ -1,4 +1,6 @@
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, getFieldValue } from '../../../lib/firebase-admin';
+const FieldValue = getFieldValue();
+
 import type { WalletTransaction, PaginationMeta } from '@peer-tutoring/types';
 import { ValidationError } from '../../../lib/errors';
 

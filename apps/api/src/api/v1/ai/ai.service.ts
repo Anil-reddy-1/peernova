@@ -1,5 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, getFieldValue } from '../../../lib/firebase-admin';
+const FieldValue = getFieldValue();
+
 import { logger } from '../../../lib/pino';
 import { BadRequestError } from '../../../lib/errors';
 import { env } from '../../../config/env';
@@ -37,12 +39,11 @@ export class AIService {
       { merge: true }
     );
     
-    // Native Firebase admin FieldValue.increment
-    const admin = require('firebase-admin');
     await userRef.update({
-      'aiUsage.tokens': admin.firestore.FieldValue.increment(tokens),
-      'aiUsage.requests': admin.firestore.FieldValue.increment(1)
+      'aiUsage.tokens': FieldValue.increment(tokens),
+      'aiUsage.requests': FieldValue.increment(1)
     });
+
   }
 
   /**

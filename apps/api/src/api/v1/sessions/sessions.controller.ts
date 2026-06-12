@@ -3,7 +3,9 @@ import { sessionsService } from './sessions.service';
 import { CreateSessionRequestSchema } from '@peer-tutoring/types';
 
 export class SessionsController {
+
   async bookSession(req: Request, res: Response, next: NextFunction): Promise<void> {
+
     try {
       const studentId = req.user!.uid;
       const parsedData = CreateSessionRequestSchema.parse(req.body);

@@ -1,5 +1,7 @@
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
-import { getStorage } from '../../../lib/firebase-admin';
+import { getFirestore, getStorage, getFieldValue } from '../../../lib/firebase-admin';
+
+const FieldValue = getFieldValue();
+
 import type { TutorProfile,  VerificationDocument, PaginationMeta, AvailabilitySlot } from '@peer-tutoring/types';
 import { v4 as uuidv4 } from 'uuid';
 import { NotFoundError, ValidationError, ConflictError } from '../../../lib/errors';

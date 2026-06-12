@@ -1,4 +1,6 @@
-import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { getFirestore, getFieldValue } from '../../../lib/firebase-admin';
+const FieldValue = getFieldValue();
+
 import type { Review, PaginationMeta } from '@peer-tutoring/types';
 import { NotFoundError, ConflictError } from '../../../lib/errors';
 

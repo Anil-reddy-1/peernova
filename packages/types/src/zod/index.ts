@@ -269,10 +269,12 @@ export const CreateSessionRequestSchema = z.object({
   tutorId: z.string(),
   slotId: z.string(),
   subject: z.string(),
-  startTime: z.string().datetime(),
-  endTime: z.string().datetime(),
-  durationMinutes: z.number().int().positive(),
-  recordingConsent: z.boolean(),
+  // startTime, endTime, durationMinutes are derived server-side from the slotId.
+  // They are optional here to avoid breaking clients that send them, but the backend ignores them.
+  startTime: z.string().datetime().optional(),
+  endTime: z.string().datetime().optional(),
+  durationMinutes: z.number().int().positive().optional(),
+  recordingConsent: z.boolean().optional().default(false),
 });
 
 export const CreateReviewRequestSchema = z.object({

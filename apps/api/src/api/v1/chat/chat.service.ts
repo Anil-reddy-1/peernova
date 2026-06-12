@@ -1,4 +1,6 @@
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, getFieldValue } from '../../../lib/firebase-admin';
+const FieldValue = getFieldValue();
+
 import crypto from 'crypto';
 import { NotFoundError } from '../../../lib/errors';
 
@@ -118,7 +120,6 @@ export class ChatService {
   async sendMessage(roomId: string, senderId: string, content: string) {
     const db = getFirestore();
     const { v4: uuidv4 } = await import('uuid');
-    const { FieldValue } = await import('firebase-admin/firestore');
 
     const roomDoc = await db.collection('rooms').doc(roomId).get();
     if (!roomDoc.exists) throw new NotFoundError('Room', roomId);
