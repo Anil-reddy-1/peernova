@@ -144,13 +144,25 @@ export class ChatService {
       lastMessageText: content,
     }, { merge: true });
 
-    return {
+    const responseData = {
       id: messageId,
       roomId,
       senderId,
       content,
       createdAt: new Date().toISOString(),
     };
+
+    // Broadcast to connected socket clients
+    try {
+      const { io } = await import('./socket');
+      if (io) {
+        io.to(`room:${roomId}`).emit('chat:message', responseData);
+      }
+    } catch (e) {
+      logger.error({ error: e }, 'Failed to broadcast message via socket');
+    }
+
+    return responseData;
   }
 }
 

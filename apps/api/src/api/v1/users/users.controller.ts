@@ -152,6 +152,47 @@ export class UsersController {
       next(error);
     }
   }
+
+  async searchUsers(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const query = (req.query.q as string || '').trim();
+      if (!query || query.length < 2) {
+        res.status(200).json({ success: true, data: [], meta: null, error: null });
+        return;
+      }
+
+      const db = getFirestore();
+      
+      // Since Firestore doesn't support case-insensitive substring search natively,
+      // we'll fetch a batch of users and filter in-memory. For a larger production app, 
+      // we would use Algolia/Elasticsearch or add a `displayName_lowercase` array/field.
+      const snapshot = await db.collection('users').limit(300).get();
+      
+      const queryLower = query.toLowerCase();
+
+      const users = snapshot.docs
+        .map(doc => {
+          const data = doc.data();
+          return {
+            id: data.id || doc.id,
+            displayName: data.displayName || '',
+            role: data.role || 'user',
+            photoURL: data.photoURL || ''
+          };
+        })
+        .filter(user => user.displayName.toLowerCase().includes(queryLower))
+        .slice(0, 15); // Return max 15 results
+
+      res.status(200).json({
+        success: true,
+        data: users,
+        meta: null,
+        error: null
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const usersController = new UsersController();

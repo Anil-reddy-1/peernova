@@ -52,6 +52,19 @@ usersRouter.delete('/delete-my-data', authenticate, usersController.deleteMyData
 
 /**
  * @swagger
+ * /api/v1/users/search:
+ *   get:
+ *     tags: [Users]
+ *     summary: Search users
+ *     description: Search users by display name prefix
+ *     security:
+ *       - bearerAuth: []
+ */
+usersRouter.get('/search', authenticate, usersController.searchUsers);
+
+
+/**
+ * @swagger
  * /api/v1/users:
  *   get:
  *     tags: [Users]

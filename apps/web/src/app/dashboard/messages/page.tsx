@@ -9,11 +9,22 @@ import { Spinner, Input, Button } from '@peer-tutoring/ui';
 import { Search, Send, Paperclip } from 'lucide-react';
 import { format } from 'date-fns';
 
+const parseDate = (val: any) => {
+  if (!val) return null;
+  if (typeof val === 'object') {
+    if ('_seconds' in val) return new Date(val._seconds * 1000);
+    if ('seconds' in val) return new Date(val.seconds * 1000);
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+};
+
 export default function MessagesPage() {
   const { userProfile } = useAuth();
   const queryClient = useQueryClient();
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { socket, joinChat, leaveChat } = useChatSocket();
@@ -38,6 +49,30 @@ export default function MessagesPage() {
       return res.data;
     },
     enabled: !!activeChatId,
+  });
+
+  // Search users
+  const { data: searchRes, isLoading: searchLoading } = useQuery({
+    queryKey: ['users', 'search', searchQuery],
+    queryFn: async () => {
+      if (searchQuery.length < 2) return [];
+      const res = await api.users.search(searchQuery);
+      return res.data;
+    },
+    enabled: searchQuery.length >= 2,
+  });
+  const searchResults = (searchRes as any)?.data || [];
+
+  const createRoomMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await api.chat.createRoom({ participantId: userId, initialMessage: 'Hello!' });
+      return (res.data as any).data;
+    },
+    onSuccess: (room) => {
+      setSearchQuery('');
+      setActiveChatId(room.id);
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    }
   });
 
   const [messages, setMessages] = useState<any[]>([]);
@@ -120,47 +155,84 @@ export default function MessagesPage() {
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-surface-400" />
             <Input
               type="text"
-              placeholder="Search chats..."
+              placeholder="Search users to chat..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 h-9 text-sm"
             />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {convLoading ? (
-            <div className="flex justify-center p-8"><Spinner /></div>
-          ) : conversations.length === 0 ? (
-            <div className="p-8 text-center text-surface-500 text-sm">No conversations yet</div>
-          ) : (
-            conversations.map((chat: any) => {
-              const participant = chat.participants.find((p: any) => p.id !== userProfile?.id) || chat.participants[0];
-              const isUnread = chat.unreadCount?.[userProfile?.id || ''] > 0;
-              return (
-                <div
-                  key={chat.id}
-                  onClick={() => setActiveChatId(chat.id)}
-                  className={`p-4 border-b border-surface-100 dark:border-surface-800/50 cursor-pointer transition-colors hover:bg-surface-100 dark:hover:bg-surface-800 ${
-                    activeChatId === chat.id ? 'bg-primary-50 dark:bg-primary-900/20' : ''
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className={`font-semibold ${activeChatId === chat.id ? 'text-primary-700 dark:text-primary-300' : 'text-surface-900 dark:text-white'}`}>
-                      {participant?.displayName || 'Unknown User'}
-                    </h3>
-                    <span className="text-xs text-surface-400">
-                      {chat.updatedAt ? format(new Date(chat.updatedAt), 'MMM d') : ''}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className={`text-sm truncate pr-4 ${isUnread ? 'font-semibold text-surface-900 dark:text-white' : 'text-surface-500'}`}>
-                      {chat.lastMessage?.content || 'Started a conversation'}
-                    </p>
-                    {isUnread && (
-                      <span className="w-2.5 h-2.5 bg-primary-500 rounded-full shrink-0"></span>
+          {searchQuery.length >= 2 ? (
+            // Search Results View
+            <div className="p-2">
+              {searchLoading ? (
+                <div className="flex justify-center p-4"><Spinner className="w-5 h-5" /></div>
+              ) : searchResults.length === 0 ? (
+                <div className="text-center text-surface-500 text-sm p-4">No users found matching "{searchQuery}"</div>
+              ) : (
+                searchResults.map((user: any) => (
+                  <div
+                    key={user.id}
+                    onClick={() => createRoomMutation.mutate(user.id)}
+                    className="flex items-center gap-3 p-3 hover:bg-surface-100 dark:hover:bg-surface-800 rounded-xl cursor-pointer transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center font-bold text-primary-700 dark:text-primary-300 overflow-hidden shrink-0">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" />
+                      ) : (
+                        user.displayName?.charAt(0) || 'U'
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm font-semibold text-surface-900 dark:text-white truncate">{user.displayName}</h4>
+                      <p className="text-xs text-surface-500 capitalize">{user.role}</p>
+                    </div>
+                    {createRoomMutation.isPending && createRoomMutation.variables === user.id && (
+                      <Spinner className="w-4 h-4" />
                     )}
                   </div>
-                </div>
-              );
-            })
+                ))
+              )}
+            </div>
+          ) : (
+            // Normal Conversations View
+            convLoading ? (
+              <div className="flex justify-center p-8"><Spinner /></div>
+            ) : conversations.length === 0 ? (
+              <div className="p-8 text-center text-surface-500 text-sm">No conversations yet</div>
+            ) : (
+              conversations.map((chat: any) => {
+                const participant = chat.participants.find((p: any) => p.id !== userProfile?.id) || chat.participants[0];
+                const isUnread = chat.unreadCount?.[userProfile?.id || ''] > 0;
+                return (
+                  <div
+                    key={chat.id}
+                    onClick={() => setActiveChatId(chat.id)}
+                    className={`p-4 border-b border-surface-100 dark:border-surface-800/50 cursor-pointer transition-colors hover:bg-surface-100 dark:hover:bg-surface-800 ${
+                      activeChatId === chat.id ? 'bg-primary-50 dark:bg-primary-900/20' : ''
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className={`font-semibold truncate ${activeChatId === chat.id ? 'text-primary-700 dark:text-primary-300' : 'text-surface-900 dark:text-white'}`}>
+                        {participant?.displayName || 'Unknown User'}
+                      </h3>
+                      <span className="text-xs text-surface-400 whitespace-nowrap ml-2">
+                        {parseDate(chat.updatedAt) ? format(parseDate(chat.updatedAt)!, 'MMM d') : ''}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <p className={`text-sm truncate pr-4 ${isUnread ? 'font-semibold text-surface-900 dark:text-white' : 'text-surface-500'}`}>
+                        {chat.lastMessage?.content || 'Started a conversation'}
+                      </p>
+                      {isUnread && (
+                        <span className="w-2.5 h-2.5 bg-primary-500 rounded-full shrink-0"></span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )
           )}
         </div>
       </div>
@@ -210,7 +282,7 @@ export default function MessagesPage() {
                       }`}>
                         <p className="break-words">{msg.content}</p>
                         <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-primary-200' : 'text-surface-400'}`}>
-                          {format(new Date(msg.createdAt), 'h:mm a')}
+                          {parseDate(msg.createdAt) ? format(parseDate(msg.createdAt)!, 'h:mm a') : ''}
                         </p>
                       </div>
                     </div>

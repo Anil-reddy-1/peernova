@@ -83,6 +83,7 @@ export const api = {
     markAllRead: () => apiClient.post<ApiResponse<null>>('/notifications/mark-all-read'),
   },
   chat: {
+    createRoom: (data: unknown) => apiClient.post<ApiResponse<unknown>>('/chat/rooms', data),
     getConversations: () => apiClient.get<ApiResponse<unknown>>('/chat/conversations'),
     getMessages: (chatId: string, params?: Record<string, unknown>) =>
       apiClient.get<ApiResponse<unknown>>(`/chat/${chatId}/messages`, { params }),
@@ -90,6 +91,7 @@ export const api = {
       apiClient.post<ApiResponse<unknown>>(`/chat/${chatId}/messages`, data),
   },
   users: {
+    search: (q: string) => apiClient.get<ApiResponse<unknown>>('/users/search', { params: { q } }),
     list: (params?: Record<string, unknown>) => apiClient.get<ApiResponse<unknown>>('/users', { params }),
     update: (id: string, data: unknown) => apiClient.patch<ApiResponse<unknown>>(`/users/${id}`, data),
   },
