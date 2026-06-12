@@ -10,9 +10,7 @@ chatRouter.get('/conversations', authenticate, chatController.getConversations);
 
 chatRouter.get('/:chatId/messages', authenticate, chatController.getMessages);
 
-// The actual message sending should be done via Socket.IO, but we can keep the REST endpoint as fallback
-chatRouter.post('/:chatId/messages', authenticate, (_req, res) => {
-  res.status(501).json({ success: false, data: null, error: { code: 'NOT_IMPLEMENTED', message: 'Send messages via Socket.IO instead', details: null }, meta: null });
-});
+// REST fallback for sending messages (also handled via Socket.IO)
+chatRouter.post('/:chatId/messages', authenticate, chatController.sendMessage);
 
 chatRouter.get('/turn-credentials', authenticate, chatController.getTurnCredentials);

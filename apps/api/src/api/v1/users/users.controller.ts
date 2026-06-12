@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { getFirestore } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
+import { getFirestore, getAuth } from '../../../lib/firebase-admin';
 import { logger } from '../../../lib/pino';
 
 export class UsersController {
@@ -100,23 +99,56 @@ export class UsersController {
   async updateUser(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const updates = req.body;
       const db = getFirestore();
-      
+
+      // Only the user themselves or an admin may update a profile
+      if (req.user?.uid !== id && req.user?.role !== 'admin') {
+        res.status(403).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: { code: 'FORBIDDEN', message: 'Insufficient permissions', details: null },
+        });
+        return;
+      }
+
+      // Strip fields that must never be updated directly via this endpoint
+      const { role, email, status, emailVerified, createdAt, deletedAt, id: _id, ...safeUpdates } = req.body;
+      void role; void email; void status; void emailVerified; void createdAt; void deletedAt; void _id;
+
+      if (Object.keys(safeUpdates).length === 0) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: { code: 'VALIDATION_ERROR', message: 'No updatable fields provided', details: null },
+        });
+        return;
+      }
+
       await db.collection('users').doc(id).update({
-        ...updates,
-        updatedAt: new Date().toISOString()
+        ...safeUpdates,
+        updatedAt: new Date().toISOString(),
       });
-      
+
+      if (safeUpdates.displayName) {
+        try {
+          await getAuth().updateUser(id, { displayName: safeUpdates.displayName });
+        } catch (e) {
+          logger.error({ error: e, userId: id }, 'Failed to update displayName in Firebase Auth');
+        }
+      }
+
       const updated = await db.collection('users').doc(id).get();
 
       res.status(200).json({
         success: true,
         data: updated.data(),
         meta: null,
-        error: null
+        error: null,
       });
     } catch (error) {
+      logger.error({ error, userId: req.params.id }, 'Failed to update user profile');
       next(error);
     }
   }

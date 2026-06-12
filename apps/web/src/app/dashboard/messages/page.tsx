@@ -57,20 +57,22 @@ export default function MessagesPage() {
       joinChat(activeChatId);
       
       const handleNewMessage = (message: any) => {
+        // Normalize message: socket sends 'text', REST sends 'content'
+        const normalized = { ...message, content: message.content || message.text };
         setMessages((prev) => {
           // Prevent duplicates
-          if (prev.find(m => m.id === message.id)) return prev;
-          return [...prev, message];
+          if (prev.find(m => m.id === normalized.id)) return prev;
+          return [...prev, normalized];
         });
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
       };
 
       if (socket) {
-        socket.on('newMessage', handleNewMessage);
+        socket.on('chat:message', handleNewMessage);
       }
 
       return () => {
-        if (socket) socket.off('newMessage', handleNewMessage);
+        if (socket) socket.off('chat:message', handleNewMessage);
         leaveChat(activeChatId);
       };
     }

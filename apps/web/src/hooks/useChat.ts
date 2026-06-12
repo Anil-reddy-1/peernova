@@ -17,7 +17,7 @@ export function useChat(roomId: string) {
 
   useEffect(() => {
     // Load historical messages
-    apiClient.get(`/v1/chat/${roomId}/messages`).then(res => {
+    apiClient.get(`/chat/${roomId}/messages`).then(res => {
       setMessages(res.data.data.reverse()); // Assuming desc from API
     });
   }, [roomId]);

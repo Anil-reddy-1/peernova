@@ -3,31 +3,56 @@
 import { useState } from 'react';
 import { useWallet, useTopup } from '@/hooks/usePayments';
 
-
-
 export default function WalletPage() {
   const { balance, currency, transactions, isLoading } = useWallet();
   const { mutate: topup, isPending } = useTopup();
   const [amount, setAmount] = useState<number | ''>('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const showMsg = (type: 'error' | 'success', msg: string) => {
+    if (type === 'error') { setError(msg); setSuccess(null); }
+    else { setSuccess(msg); setError(null); }
+    setTimeout(() => { setError(null); setSuccess(null); }, 4000);
+  };
 
   const handleTopup = () => {
-    if (!amount || amount <= 0) return alert('Enter a valid amount');
+    if (!amount || Number(amount) <= 0) {
+      showMsg('error', 'Please enter a valid amount greater than ₹0.');
+      return;
+    }
     topup(Number(amount), {
       onSuccess: () => {
-        alert('Top-up successful!');
-        window.location.reload();
+        showMsg('success', 'Wallet topped up successfully!');
+        setAmount('');
       },
       onError: () => {
-        alert('Failed to initiate top-up');
+        showMsg('error', 'Failed to initiate top-up. Please try again.');
       }
     });
   };
 
-  if (isLoading) return <div className="p-8">Loading wallet...</div>;
+  if (isLoading) return (
+    <div className="flex items-center justify-center py-32">
+      <div className="animate-spin w-8 h-8 rounded-full border-2 border-primary-500 border-t-transparent" />
+    </div>
+  );
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-up">
       <h1 className="text-3xl font-bold">My Wallet</h1>
+
+      {/* Inline messages */}
+      {error && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm font-medium">
+          <span>⚠</span> {error}
+        </div>
+      )}
+      {success && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 text-sm font-medium">
+          <span>✓</span> {success}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 gap-8">
         <div className="glass-card rounded-2xl p-8 flex flex-col justify-center items-center text-center">
@@ -37,14 +62,15 @@ export default function WalletPage() {
           </p>
           
           <div className="w-full max-w-xs space-y-4">
-            <input 
-              type="number" 
-              className="input text-center text-lg" 
+            <input
+              type="number"
+              className={`input text-center text-lg ${error ? 'border-red-500' : ''}`}
               placeholder="Enter amount"
+              min={1}
               value={amount}
-              onChange={(e) => setAmount(Number(e.target.value))}
+              onChange={(e) => { setAmount(Number(e.target.value)); setError(null); }}
             />
-            <button 
+            <button
               className="btn-primary w-full"
               onClick={handleTopup}
               disabled={isPending || !amount}

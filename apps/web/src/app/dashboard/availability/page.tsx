@@ -5,15 +5,48 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/lib/auth-context';
 import { Spinner, Button, EmptyState } from '@peer-tutoring/ui';
-import { Calendar, Trash2 } from 'lucide-react';
-import { format, addDays, startOfDay, parse } from 'date-fns';
+import { Calendar, Trash2, AlertCircle, CheckCircle } from 'lucide-react';
+import { format, addDays, startOfDay, parse, isBefore, isToday } from 'date-fns';
+
+// Inline notification banner (replaces browser alert())
+function Banner({ type, message, onDismiss }: { type: 'error' | 'success', message: string, onDismiss: () => void }) {
+  return (
+    <div className={`flex items-start gap-3 p-4 rounded-xl mb-4 border text-sm font-medium ${
+      type === 'error'
+        ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+    }`}>
+      {type === 'error' ? <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> : <CheckCircle className="w-4 h-4 shrink-0 mt-0.5" />}
+      <span className="flex-1">{message}</span>
+      <button onClick={onDismiss} className="opacity-60 hover:opacity-100 text-lg leading-none">×</button>
+    </div>
+  );
+}
+
+// Round current time to the next 30-min boundary and return HH:mm
+function getDefaultStartTime(): string {
+  const now = new Date();
+  now.setMinutes(Math.ceil(now.getMinutes() / 30) * 30, 0, 0);
+  if (now.getMinutes() >= 60) { now.setHours(now.getHours() + 1, 0, 0, 0); }
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function getDefaultEndTime(startTime: string): string {
+  const [h, m] = startTime.split(':').map(Number);
+  const end = new Date();
+  end.setHours(h + 1, m, 0, 0);
+  return `${String(end.getHours()).padStart(2, '0')}:${String(end.getMinutes()).padStart(2, '0')}`;
+}
 
 export default function AvailabilityPage() {
   const { userProfile } = useAuth();
   const queryClient = useQueryClient();
+
+  const defaultStart = getDefaultStartTime();
   const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()));
-  const [startTime, setStartTime] = useState('09:00');
-  const [endTime, setEndTime] = useState('10:00');
+  const [startTime, setStartTime] = useState(defaultStart);
+  const [endTime, setEndTime] = useState(getDefaultEndTime(defaultStart));
+  const [banner, setBanner] = useState<{ type: 'error' | 'success', message: string } | null>(null);
 
   // Fetch slots
   const { data: slotsRes, isLoading } = useQuery({
@@ -30,10 +63,18 @@ export default function AvailabilityPage() {
   // Add slot mutation
   const addSlotMutation = useMutation({
     mutationFn: async () => {
-      // Parse local time and combine with selectedDate
       const start = parse(startTime, 'HH:mm', selectedDate);
       const end = parse(endTime, 'HH:mm', selectedDate);
-      
+      const now = new Date();
+
+      // Client-side validation: block past times
+      if (isBefore(start, now)) {
+        throw new Error('Start time must be in the future. Please select a later time.');
+      }
+      if (isBefore(end, start) || end.getTime() === start.getTime()) {
+        throw new Error('End time must be after start time.');
+      }
+
       return api.tutors.createAvailability({
         startTime: start.toISOString(),
         endTime: end.toISOString(),
@@ -42,9 +83,11 @@ export default function AvailabilityPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability'] });
+      setBanner({ type: 'success', message: 'Slot added successfully!' });
     },
     onError: (err: any) => {
-      alert(err.response?.data?.error?.message || 'Failed to add slot');
+      const msg = err.message || err.response?.data?.error?.message || 'Failed to add slot. Please try again.';
+      setBanner({ type: 'error', message: msg });
     }
   });
 
@@ -55,10 +98,13 @@ export default function AvailabilityPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['availability'] });
+    },
+    onError: () => {
+      setBanner({ type: 'error', message: 'Failed to delete slot. Please try again.' });
     }
   });
 
-  // Helper to get next 7 days for selection
+  // Next 7 days for selection
   const days = Array.from({ length: 7 }).map((_, i) => addDays(startOfDay(new Date()), i));
 
   // Filter slots for selected date
@@ -66,6 +112,27 @@ export default function AvailabilityPage() {
     const slotDate = startOfDay(new Date(slot.startTime));
     return slotDate.getTime() === selectedDate.getTime();
   }).sort((a: any, b: any) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
+  // Auto-update end time when start time changes
+  const handleStartTimeChange = (newStart: string) => {
+    setStartTime(newStart);
+    setEndTime(getDefaultEndTime(newStart));
+    setBanner(null);
+  };
+
+  // When user picks a day, set smart defaults for today vs future days
+  const handleDaySelect = (day: Date) => {
+    setSelectedDate(day);
+    setBanner(null);
+    if (isToday(day)) {
+      const smart = getDefaultStartTime();
+      setStartTime(smart);
+      setEndTime(getDefaultEndTime(smart));
+    } else {
+      setStartTime('09:00');
+      setEndTime('10:00');
+    }
+  };
 
   return (
     <div className="animate-fade-up max-w-5xl mx-auto space-y-8">
@@ -90,7 +157,7 @@ export default function AvailabilityPage() {
               return (
                 <button
                   key={day.toISOString()}
-                  onClick={() => setSelectedDate(day)}
+                  onClick={() => handleDaySelect(day)}
                   className={`flex items-center justify-between px-4 py-4 min-w-[140px] md:min-w-0 transition-colors border-b border-surface-100 dark:border-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 ${
                     isSelected ? 'bg-primary-50 dark:bg-primary-900/20 text-primary-700 dark:text-primary-300 font-medium' : 'text-surface-600 dark:text-surface-400'
                   }`}
@@ -112,31 +179,40 @@ export default function AvailabilityPage() {
 
         {/* Time Slots Area */}
         <div className="flex-1 p-6 bg-white dark:bg-surface-950">
-          <h2 className="text-xl font-semibold text-surface-900 dark:text-white mb-6">
+          <h2 className="text-xl font-semibold text-surface-900 dark:text-white mb-4">
             Slots for {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+            {isToday(selectedDate) && (
+              <span className="ml-2 text-xs font-normal text-surface-500 bg-surface-100 dark:bg-surface-800 px-2 py-0.5 rounded-full">Today</span>
+            )}
           </h2>
 
+          {/* Banner replaces alert() */}
+          {banner && (
+            <Banner type={banner.type} message={banner.message} onDismiss={() => setBanner(null)} />
+          )}
+
+          {/* Add Slot Form */}
           <div className="flex gap-4 items-end mb-8 bg-surface-50 dark:bg-surface-900 p-4 rounded-xl border border-surface-200 dark:border-surface-800">
             <div className="flex-1">
               <label className="block text-sm font-medium mb-1">Start Time</label>
-              <input 
-                type="time" 
+              <input
+                type="time"
                 value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                onChange={(e) => handleStartTimeChange(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800"
               />
             </div>
             <div className="flex-1">
               <label className="block text-sm font-medium mb-1">End Time</label>
-              <input 
-                type="time" 
+              <input
+                type="time"
                 value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                onChange={(e) => { setEndTime(e.target.value); setBanner(null); }}
                 className="w-full px-3 py-2 rounded-lg border border-surface-300 dark:border-surface-700 bg-white dark:bg-surface-800"
               />
             </div>
-            <Button 
-              onClick={() => addSlotMutation.mutate()} 
+            <Button
+              onClick={() => addSlotMutation.mutate()}
               disabled={addSlotMutation.isPending}
             >
               {addSlotMutation.isPending ? 'Adding...' : 'Add Slot'}
@@ -159,10 +235,11 @@ export default function AvailabilityPage() {
                       {slot.isBooked ? 'Booked' : 'Available'}
                     </span>
                     {!slot.isBooked && (
-                      <button 
+                      <button
                         onClick={() => deleteSlotMutation.mutate(slot.id)}
                         disabled={deleteSlotMutation.isPending}
                         className="p-2 text-surface-400 hover:text-error hover:bg-error/10 rounded-lg transition-colors"
+                        title="Delete slot"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

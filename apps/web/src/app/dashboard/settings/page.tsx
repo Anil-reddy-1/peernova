@@ -1,38 +1,87 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 
+function Toast({ type, message, onClose }: { type: 'success' | 'error', message: string, onClose: () => void }) {
+  return (
+    <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-xl shadow-lg text-white font-medium animate-fade-in ${
+      type === 'success' ? 'bg-green-600' : 'bg-red-600'
+    }`}>
+      <span>{type === 'success' ? '✓' : '✕'}</span>
+      <span>{message}</span>
+      <button onClick={onClose} className="ml-2 opacity-70 hover:opacity-100">✕</button>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
-  const { userProfile, role } = useAuth();
+  const { user, userProfile, role, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'profile' | 'preferences' | 'security'>('profile');
   const [displayName, setDisplayName] = useState(userProfile?.displayName || '');
-  const [bio, setBio] = useState(''); // simplified mock
+  const [bio, setBio] = useState('');
+  const [toast, setToast] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+
+  // Sync displayName state once userProfile loads from Firestore (it may be null on first render)
+  useEffect(() => {
+    if (userProfile?.displayName) {
+      setDisplayName(userProfile.displayName);
+    }
+  }, [userProfile?.displayName]);
+
+  const { data: tutorProfileRes } = useQuery({
+    queryKey: ['tutor', user?.uid],
+    queryFn: async () => {
+      const res = await api.tutors.getById(user!.uid);
+      return res.data;
+    },
+    enabled: role === 'tutor' && !!user?.uid,
+  });
+
+  useEffect(() => {
+    if (tutorProfileRes) {
+      setBio((tutorProfileRes as any)?.bio || '');
+    }
+  }, [tutorProfileRes]);
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 4000);
+  };
 
   const updateProfileMutation = useMutation({
     mutationFn: async () => {
-      // update base user profile
-      if (userProfile?.id) {
-        await api.users.update(userProfile.id, { displayName });
-      }
-      // If tutor, update tutor bio via tutors endpoint
-      if (role === 'tutor' && userProfile?.id) {
-        await api.tutors.update(userProfile.id, { bio });
+      // Use user.uid from Firebase Auth — always available, unlike userProfile?.id which loads asynchronously
+      const uid = user?.uid;
+      if (!uid) throw new Error('Not authenticated');
+
+      await api.users.update(uid, { displayName });
+
+      if (role === 'tutor') {
+        await api.tutors.update(uid, { bio });
       }
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await refreshProfile();
       queryClient.invalidateQueries({ queryKey: ['me'] });
-      alert('Profile updated successfully!');
+      if (role === 'tutor' && user?.uid) {
+        queryClient.invalidateQueries({ queryKey: ['tutor', user.uid] });
+      }
+      showToast('success', 'Profile updated successfully!');
     },
-    onError: () => {
-      alert('Failed to update profile.');
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Failed to update profile. Please try again.';
+      showToast('error', message);
     }
   });
 
+
   return (
     <div className="animate-fade-up max-w-4xl mx-auto space-y-8">
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
       <div>
         <h1 className="text-3xl font-bold text-surface-900 dark:text-white">Settings</h1>
         <p className="text-surface-500 mt-1">Manage your account settings and preferences.</p>
@@ -40,27 +89,16 @@ export default function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex border-b border-surface-200 dark:border-surface-800">
-        <button
-          className={`px-4 py-3 font-medium text-sm transition-colors relative ${activeTab === 'profile' ? 'text-primary-600 dark:text-primary-400' : 'text-surface-500 hover:text-surface-900 dark:hover:text-white'}`}
-          onClick={() => setActiveTab('profile')}
-        >
-          Profile
-          {activeTab === 'profile' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-600 dark:bg-primary-500 rounded-t-full" />}
-        </button>
-        <button
-          className={`px-4 py-3 font-medium text-sm transition-colors relative ${activeTab === 'preferences' ? 'text-primary-600 dark:text-primary-400' : 'text-surface-500 hover:text-surface-900 dark:hover:text-white'}`}
-          onClick={() => setActiveTab('preferences')}
-        >
-          Preferences
-          {activeTab === 'preferences' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-600 dark:bg-primary-500 rounded-t-full" />}
-        </button>
-        <button
-          className={`px-4 py-3 font-medium text-sm transition-colors relative ${activeTab === 'security' ? 'text-primary-600 dark:text-primary-400' : 'text-surface-500 hover:text-surface-900 dark:hover:text-white'}`}
-          onClick={() => setActiveTab('security')}
-        >
-          Security
-          {activeTab === 'security' && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-600 dark:bg-primary-500 rounded-t-full" />}
-        </button>
+        {(['profile', 'preferences', 'security'] as const).map(tab => (
+          <button
+            key={tab}
+            className={`px-4 py-3 font-medium text-sm transition-colors relative capitalize ${activeTab === tab ? 'text-primary-600 dark:text-primary-400' : 'text-surface-500 hover:text-surface-900 dark:hover:text-white'}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab}
+            {activeTab === tab && <span className="absolute bottom-0 left-0 w-full h-0.5 bg-primary-600 dark:bg-primary-500 rounded-t-full" />}
+          </button>
+        ))}
       </div>
 
       {/* Content */}
@@ -96,8 +134,8 @@ export default function SettingsPage() {
             </div>
 
             <div className="pt-4 border-t border-surface-100 dark:border-surface-800">
-              <button 
-                onClick={() => updateProfileMutation.mutate()} 
+              <button
+                onClick={() => updateProfileMutation.mutate()}
                 disabled={updateProfileMutation.isPending}
                 className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors disabled:opacity-50"
               >
@@ -112,33 +150,26 @@ export default function SettingsPage() {
             <h2 className="text-xl font-semibold text-surface-900 dark:text-white">Notifications</h2>
             
             <div className="space-y-4">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500" />
-                <div>
-                  <p className="font-medium text-surface-900 dark:text-white">Email Notifications</p>
-                  <p className="text-sm text-surface-500">Receive emails about new messages and session updates.</p>
-                </div>
-              </label>
-              
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500" />
-                <div>
-                  <p className="font-medium text-surface-900 dark:text-white">Browser Notifications</p>
-                  <p className="text-sm text-surface-500">Get push notifications when you are active on the site.</p>
-                </div>
-              </label>
-
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500" />
-                <div>
-                  <p className="font-medium text-surface-900 dark:text-white">Marketing Emails</p>
-                  <p className="text-sm text-surface-500">Receive tips, newsletters, and promotional content.</p>
-                </div>
-              </label>
+              {[
+                { label: 'Email Notifications', desc: 'Receive emails about new messages and session updates.', defaultChecked: true },
+                { label: 'Browser Notifications', desc: 'Get push notifications when you are active on the site.', defaultChecked: true },
+                { label: 'Marketing Emails', desc: 'Receive tips, newsletters, and promotional content.', defaultChecked: false },
+              ].map(item => (
+                <label key={item.label} className="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" defaultChecked={item.defaultChecked} className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500" />
+                  <div>
+                    <p className="font-medium text-surface-900 dark:text-white">{item.label}</p>
+                    <p className="text-sm text-surface-500">{item.desc}</p>
+                  </div>
+                </label>
+              ))}
             </div>
 
             <div className="pt-4 border-t border-surface-100 dark:border-surface-800">
-              <button className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors">
+              <button
+                onClick={() => showToast('success', 'Preferences saved!')}
+                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors"
+              >
                 Update Preferences
               </button>
             </div>

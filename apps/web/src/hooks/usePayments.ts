@@ -5,7 +5,7 @@ export function useWallet() {
   const { data: balanceData, isLoading: isBalanceLoading } = useQuery({
     queryKey: ['wallet', 'balance'],
     queryFn: async () => {
-      const { data } = await apiClient.get('/v1/payments/wallet');
+      const { data } = await apiClient.get('/payments/wallet');
       return data.data;
     }
   });
@@ -13,7 +13,7 @@ export function useWallet() {
   const { data: txData, isLoading: isTxLoading } = useQuery({
     queryKey: ['wallet', 'transactions'],
     queryFn: async () => {
-      const { data } = await apiClient.get('/v1/payments/wallet/transactions');
+      const { data } = await apiClient.get('/payments/wallet/transactions');
       return data.data; // Array of transactions
     }
   });
@@ -31,7 +31,7 @@ export function useTopup() {
 
   return useMutation({
     mutationFn: async (amount: number) => {
-      const { data } = await apiClient.post('/v1/payments/create-order', { amount });
+      const { data } = await apiClient.post('/payments/create-order', { amount });
       return data.data;
     },
     onSuccess: () => {

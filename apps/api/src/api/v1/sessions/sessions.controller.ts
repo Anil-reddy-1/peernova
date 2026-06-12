@@ -31,6 +31,7 @@ export class SessionsController {
     try {
       const { id } = req.params;
       const { paymentId } = req.body;
+      const userId = req.user!.uid;
 
       if (!paymentId) {
         res.status(400).json({
@@ -42,7 +43,7 @@ export class SessionsController {
         return;
       }
 
-      await sessionsService.confirmPayment(id as string, paymentId);
+      await sessionsService.confirmPayment(id as string, paymentId, userId);
 
       res.status(200).json({
         success: true,

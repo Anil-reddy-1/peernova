@@ -11,7 +11,7 @@ export function useSessions() {
   return useInfiniteQuery<SessionsResponse, Error>({
     queryKey: ['sessions'],
     queryFn: async ({ pageParam = 1 }) => {
-      const { data } = await apiClient.get<{ data: Session[], meta: PaginationMeta }>('/v1/sessions', {
+      const { data } = await apiClient.get<{ data: Session[], meta: PaginationMeta }>('/sessions', {
         params: { page: pageParam },
       });
       return data;
@@ -32,7 +32,7 @@ export function useSessionActions() {
 
   const cancelSession = useMutation({
     mutationFn: async ({ sessionId, reason }: { sessionId: string, reason: string }) => {
-      const { data } = await apiClient.post(`/v1/sessions/${sessionId}/cancel`, { reason });
+      const { data } = await apiClient.post(`/sessions/${sessionId}/cancel`, { reason });
       return data;
     },
     onSuccess: () => {
@@ -42,7 +42,7 @@ export function useSessionActions() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ sessionId, status }: { sessionId: string, status: string }) => {
-      const { data } = await apiClient.patch(`/v1/sessions/${sessionId}/status`, { status });
+      const { data } = await apiClient.patch(`/sessions/${sessionId}/status`, { status });
       return data;
     },
     onSuccess: () => {

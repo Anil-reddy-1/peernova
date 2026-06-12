@@ -24,7 +24,7 @@ export function useWebRTC(roomId: string) {
 
     const init = async () => {
       // Get TURN credentials
-      const { data: turnRes } = await apiClient.get('/v1/chat/turn-credentials');
+      const { data: turnRes } = await apiClient.get('/chat/turn-credentials');
       
       const config: RTCConfiguration = {
         iceServers: [

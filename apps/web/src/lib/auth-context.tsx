@@ -24,6 +24,7 @@ interface AuthContextValue {
   loading: boolean;
   error: string | null;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -33,6 +34,7 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   error: null,
   signOut: async () => {},
+  refreshProfile: async () => {},
 });
 
 export function useAuth() {
@@ -92,8 +94,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole(null);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (user) {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        setUserProfile(userDoc.data() as BaseUser);
+      }
+    }
+  }, [user]);
+
   return (
-    <AuthContext value={{ user, userProfile, role, loading, error, signOut }}>
+    <AuthContext value={{ user, userProfile, role, loading, error, signOut, refreshProfile }}>
       {children}
     </AuthContext>
   );

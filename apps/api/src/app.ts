@@ -13,7 +13,7 @@ import { swaggerSpec } from './config/swagger';
 
 export function createApp() {
   const app = express();
-
+ 
   // ─── Global Middleware (order matters) ───────────────────
   app.use(requestIdMiddleware);
   app.use(pinoHttpMiddleware);

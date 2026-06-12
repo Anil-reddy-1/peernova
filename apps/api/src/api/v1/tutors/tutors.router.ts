@@ -74,31 +74,87 @@ export const tutorsRouter = Router();
  */
 tutorsRouter.get('/', tutorsController.getTutors);
 
+// NOTE: Specific named routes MUST come BEFORE /:id to avoid being shadowed by the param route.
+
+/**
+ * @swagger
+ * /api/v1/tutors/availability/{id}:
+ *   get:
+ *     tags: [Tutors]
+ *     summary: Get tutor availability
+ *     description: Retrieve a tutor's future availability slots.
+ */
+tutorsRouter.get('/availability/:id', tutorsController.getAvailability);
+
+/**
+ * @swagger
+ * /api/v1/tutors/availability:
+ *   post:
+ *     tags: [Tutors]
+ *     summary: Create availability slot
+ */
+tutorsRouter.post(
+  '/availability',
+  authenticate,
+  requireRole(['tutor']),
+  tutorsController.createAvailability,
+);
+
+/**
+ * @swagger
+ * /api/v1/tutors/availability/{slotId}:
+ *   delete:
+ *     tags: [Tutors]
+ *     summary: Delete availability slot
+ */
+tutorsRouter.delete(
+  '/availability/:slotId',
+  authenticate,
+  requireRole(['tutor']),
+  tutorsController.deleteAvailability,
+);
+
+/**
+ * @swagger
+ * /api/v1/tutors/verification:
+ *   post:
+ *     tags: [Tutors]
+ *     summary: Upload verification documents
+ *     description: Tutors can upload ID and degree certificates to get verified.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               document:
+ *                 type: string
+ *                 format: binary
+ *               type:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Document uploaded successfully
+ */
+tutorsRouter.post(
+  '/verification',
+  authenticate,
+  requireRole(['tutor']),
+  upload.single('document'),
+  tutorsController.uploadVerificationDocument,
+);
+
+// ─── Parameterised routes — must come AFTER all fixed-path routes ───────────
+
 /**
  * @swagger
  * /api/v1/tutors/{id}:
  *   get:
  *     tags: [Tutors]
  *     summary: Get tutor profile
- *     description: Retrieve a single tutor's full profile by their user ID.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Tutor user ID
- *     responses:
- *       200:
- *         description: Tutor profile
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
- *       404:
- *         description: Tutor not found
- *       501:
- *         description: Not implemented
  */
 tutorsRouter.get('/:id', tutorsController.getTutorById);
 
@@ -163,43 +219,8 @@ tutorsRouter.get('/:id', tutorsController.getTutorById);
  *         description: Not the profile owner or admin
  *       404:
  *         description: Tutor not found
- *       501:
- *         description: Not implemented
  */
 tutorsRouter.patch('/:id', authenticate, tutorsController.updateProfile);
-
-/**
- * @swagger
- * /api/v1/tutors/verification:
- *   post:
- *     tags: [Tutors]
- *     summary: Upload verification documents
- *     description: Tutors can upload ID and degree certificates to get verified.
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         multipart/form-data:
- *           schema:
- *             type: object
- *             properties:
- *               document:
- *                 type: string
- *                 format: binary
- *               type:
- *                 type: string
- *     responses:
- *       200:
- *         description: Document uploaded successfully
- */
-tutorsRouter.post(
-  '/verification',
-  authenticate,
-  requireRole(['tutor']),
-  upload.single('document'),
-  tutorsController.uploadVerificationDocument,
-);
 
 /**
  * @swagger
@@ -244,97 +265,10 @@ tutorsRouter.post(
  *         description: Admin role required
  *       404:
  *         description: Tutor not found
- *       501:
- *         description: Not implemented
  */
 tutorsRouter.post(
   '/:id/verify',
   authenticate,
   requireRole(['admin']),
   tutorsController.verifyTutor,
-);
-
-/**
- * @swagger
- * /api/v1/tutors/availability/{id}:
- *   get:
- *     tags: [Tutors]
- *     summary: Get tutor availability
- *     description: Retrieve a tutor's future availability slots.
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: List of availability slots
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ApiResponse'
- */
-tutorsRouter.get('/availability/:id', tutorsController.getAvailability);
-
-/**
- * @swagger
- * /api/v1/tutors/availability:
- *   post:
- *     tags: [Tutors]
- *     summary: Create availability slot
- *     description: Create a new availability slot for the authenticated tutor.
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [startTime, endTime, timezone]
- *             properties:
- *               startTime:
- *                 type: string
- *                 format: date-time
- *               endTime:
- *                 type: string
- *                 format: date-time
- *               timezone:
- *                 type: string
- *     responses:
- *       201:
- *         description: Slot created
- */
-tutorsRouter.post(
-  '/availability',
-  authenticate,
-  requireRole(['tutor']),
-  tutorsController.createAvailability,
-);
-
-/**
- * @swagger
- * /api/v1/tutors/availability/{slotId}:
- *   delete:
- *     tags: [Tutors]
- *     summary: Delete availability slot
- *     description: Soft delete an availability slot.
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: slotId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Slot deleted
- */
-tutorsRouter.delete(
-  '/availability/:slotId',
-  authenticate,
-  requireRole(['tutor']),
-  tutorsController.deleteAvailability,
 );

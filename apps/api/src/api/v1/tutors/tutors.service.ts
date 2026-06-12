@@ -14,70 +14,78 @@ export class TutorsService {
 
   async getTutors(params: {
     subject?: string;
+    search?: string;
     minRating?: number;
     maxPrice?: number;
     minPrice?: number;
     page: number;
     limit: number;
-  }): Promise<{ data: TutorProfile[]; meta: PaginationMeta }> {
-    const { subject, minRating, maxPrice, minPrice, page, limit } = params;
+  }): Promise<{ data: (TutorProfile & { displayName: string; photoURL: string | null })[]; meta: PaginationMeta }> {
+    const { subject, search, minRating, maxPrice, minPrice, page, limit } = params;
 
-    // Cache removed
+    const snapshot = await this.db.collection('tutors').get();
+    let tutors = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TutorProfile & { id: string }));
 
-    let query: FirebaseFirestore.Query = this.db.collection('tutors');
-
-    // Firestore has limitations on multiple inequality filters on different fields.
-    // We will apply 'subject' (array-contains) and 'hourlyRate' (inequality) at DB level if possible,
-    // but rating we might have to filter in-memory if we already use an inequality on price.
-    // Since Firebase now supports multiple inequality filters, let's try to use them or fallback to memory.
-    // For simplicity and safety, let's just fetch all verified tutors and filter/sort/paginate in memory
-    // IF the DB query gets too complex, OR use basic queries.
-    // Let's use basic queries.
-    
-    query = query.where('isVerified', '==', true);
     // Soft delete check
-    query = query.where('deletedAt', '==', null);
+    tutors = tutors.filter(t => !t.deletedAt);
 
-    const snapshot = await query.get();
-    let tutors = snapshot.docs.map(doc => doc.data() as TutorProfile);
+    // Enrich with user displayName and photoURL from the users collection
+    const userIds = tutors.map(t => t.userId);
+    const userDocs = await Promise.all(
+      userIds.map(uid => this.db.collection('users').doc(uid).get())
+    );
+    const userMap = new Map<string, { displayName: string; photoURL: string | null }>();
+    userDocs.forEach(doc => {
+      if (doc.exists) {
+        const d = doc.data()!;
+        userMap.set(doc.id, { displayName: d.displayName || '', photoURL: d.photoURL || null });
+      }
+    });
+
+    type EnrichedTutor = TutorProfile & { id: string; displayName: string; photoURL: string | null };
+    let enriched: EnrichedTutor[] = tutors.map(t => ({
+      ...t,
+      displayName: userMap.get(t.userId)?.displayName || '',
+      photoURL: userMap.get(t.userId)?.photoURL || null,
+    }));
 
     // Apply filters
+    if (search) {
+      const lower = search.toLowerCase();
+      enriched = enriched.filter(t =>
+        t.displayName.toLowerCase().includes(lower) ||
+        t.subjects.some(s => s.name.toLowerCase().includes(lower))
+      );
+    }
     if (subject) {
       const lowerSubject = subject.toLowerCase();
-      tutors = tutors.filter(t => t.subjects.some(s => s.name.toLowerCase().includes(lowerSubject)));
+      enriched = enriched.filter(t => t.subjects.some(s => s.name.toLowerCase().includes(lowerSubject)));
     }
     if (minRating !== undefined) {
-      tutors = tutors.filter(t => t.rating >= minRating);
+      enriched = enriched.filter(t => t.rating >= minRating);
     }
     if (maxPrice !== undefined) {
-      tutors = tutors.filter(t => t.hourlyRate <= maxPrice);
+      enriched = enriched.filter(t => t.hourlyRate <= maxPrice);
     }
     if (minPrice !== undefined) {
-      tutors = tutors.filter(t => t.hourlyRate >= minPrice);
+      enriched = enriched.filter(t => t.hourlyRate >= minPrice);
     }
 
     // Sort by rating DESC
-    tutors.sort((a, b) => b.rating - a.rating);
+    enriched.sort((a, b) => b.rating - a.rating);
 
     // Paginate
-    const total = tutors.length;
+    const total = enriched.length;
     const startIndex = (page - 1) * limit;
-    const paginatedTutors = tutors.slice(startIndex, startIndex + limit);
+    const paginatedTutors = enriched.slice(startIndex, startIndex + limit);
 
-    const result = {
+    return {
       data: paginatedTutors,
-      meta: {
-        page,
-        limit,
-        total,
-        hasMore: startIndex + limit < total,
-      },
+      meta: { page, limit, total, hasMore: startIndex + limit < total },
     };
-
-    return result;
   }
 
-  async getTutorById(tutorId: string): Promise<TutorProfile> {
+  async getTutorById(tutorId: string): Promise<TutorProfile & { displayName: string; photoURL: string | null }> {
     const doc = await this.db.collection('tutors').doc(tutorId).get();
     if (!doc.exists) {
       throw new NotFoundError('Tutor', tutorId);
@@ -86,7 +94,17 @@ export class TutorsService {
     if (tutor.deletedAt) {
       throw new NotFoundError('Tutor', tutorId);
     }
-    return tutor;
+
+    // Enrich with displayName and photoURL from users collection
+    const userDoc = await this.db.collection('users').doc(tutor.userId).get();
+    const userData = userDoc.exists ? userDoc.data()! : {};
+
+    return {
+      ...tutor,
+      id: tutorId,
+      displayName: (userData as any).displayName || '',
+      photoURL: (userData as any).photoURL || null,
+    };
   }
 
   async updateProfile(tutorId: string, data: Partial<TutorProfile>): Promise<TutorProfile> {
@@ -114,12 +132,18 @@ export class TutorsService {
     const now = new Date();
     const snapshot = await this.db.collection('availability')
       .where('tutorId', '==', tutorId)
-      .where('startTime', '>=', now)
-      .where('isBooked', '==', false)
       .orderBy('startTime', 'asc')
       .get();
 
-    return snapshot.docs.map(doc => doc.data() as AvailabilitySlot);
+    return snapshot.docs
+      .map(doc => {
+        const data = doc.data();
+        // Handle Firestore Timestamp objects
+        const startTime = data.startTime?.toDate ? data.startTime.toDate() : new Date(data.startTime);
+        const endTime = data.endTime?.toDate ? data.endTime.toDate() : new Date(data.endTime);
+        return { ...data, id: doc.id, startTime, endTime } as AvailabilitySlot;
+      })
+      .filter(slot => slot.startTime >= now && !slot.deletedAt); // Filter past and deleted slots in-memory
   }
 
   async createAvailability(tutorId: string, slotData: { startTime: Date, endTime: Date, timezone: string }): Promise<AvailabilitySlot> {
@@ -133,18 +157,16 @@ export class TutorsService {
       throw new ValidationError({ endTime: ['Slot must be between 0 and 2 hours'] });
     }
 
-    // Check for overlaps
+    // Check for overlaps - fetch all tutor slots and filter in memory to avoid composite index requirement
     const existingSlots = await this.db.collection('availability')
       .where('tutorId', '==', tutorId)
-      .where('startTime', '<', slotData.endTime)
       .get();
 
     const hasOverlap = existingSlots.docs.some(doc => {
       const existing = doc.data() as AvailabilitySlot;
-      // Because we queried startTime < new.endTime, we just need to check if existing.endTime > new.startTime
-      // Note: Firestore returns Timestamps which need to be converted to dates
+      const existingStart = (existing.startTime as any).toDate ? (existing.startTime as any).toDate() : new Date(existing.startTime);
       const existingEnd = (existing.endTime as any).toDate ? (existing.endTime as any).toDate() : new Date(existing.endTime);
-      return existingEnd > slotData.startTime && !existing.deletedAt;
+      return existingEnd > slotData.startTime && existingStart < slotData.endTime && !existing.deletedAt;
     });
 
     if (hasOverlap) {

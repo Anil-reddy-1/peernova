@@ -16,7 +16,10 @@ export default function TutorsPage() {
   const { data: response, isLoading, isError } = useQuery({
     queryKey: ['tutors', searchTerm, subjectFilter],
     queryFn: async () => {
-      const res = await api.tutors.list({ search: searchTerm, subject: subjectFilter });
+      const res = await api.tutors.list({
+        search: searchTerm || undefined,
+        subject: subjectFilter || undefined,
+      });
       return res.data;
     },
   });
@@ -73,29 +76,33 @@ export default function TutorsPage() {
       {/* Tutors Grid */}
       {!isLoading && !isError && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {tutors.map((tutor: any) => (
-            <div key={tutor.id} className="glass-card rounded-2xl p-6 hover-lift flex flex-col items-center text-center">
-              <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-2xl font-bold text-primary-700 dark:text-primary-300 mb-4 overflow-hidden">
-                {tutor.profile?.avatarUrl ? (
-                  <img src={tutor.profile.avatarUrl} alt={tutor.displayName} className="w-full h-full object-cover" />
-                ) : (
-                  tutor.displayName?.charAt(0) || 'T'
-                )}
+          {tutors.map((tutor: any) => {
+            // API returns userId as the tutor's unique ID
+            const tutorId = tutor.id || tutor.userId;
+            return (
+              <div key={tutorId} className="glass-card rounded-2xl p-6 hover-lift flex flex-col items-center text-center">
+                <div className="w-20 h-20 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-2xl font-bold text-primary-700 dark:text-primary-300 mb-4 overflow-hidden">
+                  {tutor.photoURL ? (
+                    <img src={tutor.photoURL} alt={tutor.displayName} className="w-full h-full object-cover" />
+                  ) : (
+                    tutor.displayName?.charAt(0)?.toUpperCase() || 'T'
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-surface-900 dark:text-white">{tutor.displayName || 'Tutor'}</h3>
+                <p className="text-sm font-medium text-primary-600 dark:text-primary-400">
+                  {tutor.subjects?.map((s: any) => s.name).join(', ') || 'General'}
+                </p>
+                <div className="flex items-center gap-2 mt-2 text-sm text-surface-600 dark:text-surface-400">
+                  <span className="flex items-center text-warning-500">⭐ {tutor.rating > 0 ? tutor.rating.toFixed(1) : 'New'}</span>
+                  <span>•</span>
+                  <span>₹{tutor.hourlyRate || 0}/hr</span>
+                </div>
+                <Link href={`/dashboard/tutors/${tutorId}`} className="mt-6 w-full py-2 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-900 dark:text-white rounded-xl font-medium transition-colors text-center block">
+                  View Profile
+                </Link>
               </div>
-              <h3 className="text-lg font-bold text-surface-900 dark:text-white">{tutor.displayName}</h3>
-              <p className="text-sm font-medium text-primary-600 dark:text-primary-400">
-                {tutor.profile?.subjects?.join(', ') || 'General'}
-              </p>
-              <div className="flex items-center gap-2 mt-2 text-sm text-surface-600 dark:text-surface-400">
-                <span className="flex items-center text-warning-500">⭐ {tutor.profile?.rating?.toFixed(1) || 'New'}</span>
-                <span>•</span>
-                <span>₹{tutor.profile?.hourlyRate || 0}/hr</span>
-              </div>
-              <Link href={`/dashboard/tutors/${tutor.id}`} className="mt-6 w-full py-2 bg-surface-100 hover:bg-surface-200 dark:bg-surface-800 dark:hover:bg-surface-700 text-surface-900 dark:text-white rounded-xl font-medium transition-colors text-center block">
-                View Profile
-              </Link>
-            </div>
-          ))}
+            );
+          })}
           {tutors.length === 0 && (
             <div className="col-span-full">
               <EmptyState

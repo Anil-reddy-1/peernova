@@ -11,12 +11,14 @@ export class TutorsController {
       const page = parseInt(((req.query.page as string)) || '1', 10);
       const limit = parseInt(((req.query.limit as string)) || '20', 10);
       const subject = ((req.query.subject as string)) || undefined;
+      const search = ((req.query.search as string)) || undefined;
       const minRating = req.query.minRating ? parseFloat((req.query.minRating as string)) : undefined;
       const maxPrice = req.query.maxPrice ? parseFloat((req.query.maxPrice as string)) : undefined;
       const minPrice = req.query.minPrice ? parseFloat((req.query.minPrice as string)) : undefined;
 
       const result = await tutorsService.getTutors({
         subject,
+        search,
         minRating,
         maxPrice,
         minPrice,
@@ -80,26 +82,14 @@ export class TutorsController {
     }
   }
 
-  async verifyTutor(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { id } = req.params;
-      const { status } = req.body;
-      
-      // Verification logic placeholder
-      // update isVerified status
-      const updatedTutor = await tutorsService.updateProfile(id as string, { 
-        isVerified: status === 'approved' 
-      });
-
-      res.status(200).json({
-        success: true,
-        data: updatedTutor,
-        meta: null,
-        error: null,
-      });
-    } catch (error) {
-      next(error);
-    }
+  async verifyTutor(_req: Request, res: Response, _next: NextFunction): Promise<void> {
+    // Verification has been disabled for now.
+    res.status(501).json({
+      success: false,
+      data: null,
+      meta: null,
+      error: { code: 'NOT_IMPLEMENTED', message: 'Tutor verification is disabled', details: null },
+    });
   }
 
   async getAvailability(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -143,9 +133,9 @@ export class TutorsController {
   async deleteAvailability(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const tutorId = req.user!.uid;
-      const { id } = req.params;
+      const { slotId } = req.params;
       
-      await tutorsService.deleteAvailability(tutorId, id as string);
+      await tutorsService.deleteAvailability(tutorId, slotId as string);
 
       res.status(200).json({
         success: true,

@@ -19,7 +19,7 @@ export function useTutors(params: GetTutorsParams = {}) {
   return useInfiniteQuery<TutorsResponse, Error>({
     queryKey: ['tutors', params],
     queryFn: async ({ pageParam = 1 }) => {
-      const { data } = await apiClient.get<{ data: TutorProfile[], meta: PaginationMeta }>('/v1/tutors', {
+      const { data } = await apiClient.get<{ data: TutorProfile[], meta: PaginationMeta }>('/tutors', {
         params: { ...params, page: pageParam },
       });
       return data;
@@ -38,7 +38,7 @@ export function useTutorProfile(id: string) {
   return useQuery({
     queryKey: ['tutors', id],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ data: TutorProfile }>(`/v1/tutors/${id}`);
+      const { data } = await apiClient.get<{ data: TutorProfile }>(`/tutors/${id}`);
       return data.data;
     },
     enabled: !!id,
@@ -49,7 +49,7 @@ export function useTutorAvailability(id: string) {
   return useQuery({
     queryKey: ['tutors', id, 'availability'],
     queryFn: async () => {
-      const { data } = await apiClient.get<{ data: any[] }>(`/v1/tutors/availability/${id}`);
+      const { data } = await apiClient.get<{ data: any[] }>(`/tutors/availability/${id}`);
       return data.data;
     },
     enabled: !!id,

@@ -8,6 +8,7 @@ export type SessionStatus =
 
 export interface Session {
   id: string;
+  slotId: string;
   tutorId: string;
   studentId: string;
   subject: string;
