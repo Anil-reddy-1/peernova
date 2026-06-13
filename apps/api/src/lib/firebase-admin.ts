@@ -14,6 +14,9 @@ import type { UserRole } from '@peer-tutoring/types';
 import { logger } from './pino';
 import { ServiceUnavailableError } from './errors';
 
+// Force native DNS resolution for gRPC to fix timeout issues on Node 18+ Windows
+process.env.GRPC_DNS_RESOLVER = 'native';
+
 let firebaseApp: App | null = null;
 
 export function initializeFirebase(): App | null {
