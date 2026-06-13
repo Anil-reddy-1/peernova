@@ -11,11 +11,6 @@ export default function HomePage() {
         </div>
 
         <div className="max-w-7xl mx-auto px-6 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary-50 dark:bg-primary-950/50 text-primary-700 dark:text-primary-300 text-sm font-medium mb-8 animate-fade-up">
-            <span className="w-2 h-2 rounded-full bg-primary-500 animate-pulse-soft" />
-            Trusted by 10,000+ students worldwide
-          </div>
-
           <h1 className="text-5xl md:text-7xl font-bold tracking-tight mb-6 animate-fade-up text-balance" style={{ animationDelay: '0.1s' }}>
             Find Your{' '}
             <span className="gradient-text">Perfect Tutor</span>
@@ -33,23 +28,6 @@ export default function HomePage() {
               Become a Tutor
             </Link>
           </div>
-        </div>
-      </section>
-
-      {/* ─── Stats ───────────────────────────────────────── */}
-      <section className="py-16 border-y border-surface-200 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-900/50">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-2 md:grid-cols-4 gap-8">
-          {[
-            { value: '10K+', label: 'Sessions Completed' },
-            { value: '500+', label: 'Expert Tutors' },
-            { value: '4.9★', label: 'Average Rating' },
-            { value: '50+', label: 'Subjects' },
-          ].map((stat) => (
-            <div key={stat.label} className="text-center">
-              <div className="text-3xl md:text-4xl font-bold gradient-text">{stat.value}</div>
-              <div className="text-sm text-surface-500 mt-1">{stat.label}</div>
-            </div>
-          ))}
         </div>
       </section>
 

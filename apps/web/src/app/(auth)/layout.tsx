@@ -28,20 +28,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <p className="text-lg text-white/70 max-w-md">
             Connect with expert peer tutors for personalized, 1-on-1 video tutoring sessions in any subject.
           </p>
-          <div className="mt-12 flex gap-8">
-            <div>
-              <div className="text-3xl font-bold">10K+</div>
-              <div className="text-sm text-white/60">Sessions completed</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold">500+</div>
-              <div className="text-sm text-white/60">Expert tutors</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold">4.9★</div>
-              <div className="text-sm text-white/60">Average rating</div>
-            </div>
-          </div>
         </div>
       </div>
 
