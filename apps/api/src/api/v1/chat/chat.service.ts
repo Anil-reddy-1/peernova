@@ -117,7 +117,7 @@ export class ChatService {
     };
   }
 
-  async sendMessage(roomId: string, senderId: string, content: string) {
+  async sendMessage(roomId: string, senderId: string, content: string, type?: string, fileURL?: string, fileType?: string) {
     const db = getFirestore();
     const { v4: uuidv4 } = await import('uuid');
 
@@ -130,27 +130,35 @@ export class ChatService {
     }
 
     const messageId = uuidv4();
-    const message = {
+    const message: any = {
       id: messageId,
       roomId,
       senderId,
       content,
+      type: type || 'text',
       createdAt: FieldValue.serverTimestamp(),
     };
+    
+    if (fileURL) message.fileURL = fileURL;
+    if (fileType) message.fileType = fileType;
 
     await db.collection('rooms').doc(roomId).collection('messages').doc(messageId).set(message);
     await db.collection('rooms').doc(roomId).set({
       lastMessageAt: FieldValue.serverTimestamp(),
-      lastMessageText: content,
+      lastMessageText: type === 'file' ? 'Sent a file' : content,
     }, { merge: true });
 
-    const responseData = {
+    const responseData: any = {
       id: messageId,
       roomId,
       senderId,
       content,
+      type: type || 'text',
       createdAt: new Date().toISOString(),
     };
+    
+    if (fileURL) responseData.fileURL = fileURL;
+    if (fileType) responseData.fileType = fileType;
 
     // Broadcast to connected socket clients
     try {
@@ -159,7 +167,7 @@ export class ChatService {
         io.to(`room:${roomId}`).emit('chat:message', responseData);
       }
     } catch (e) {
-      logger.error({ error: e }, 'Failed to broadcast message via socket');
+      console.error('Failed to broadcast message via socket', e);
     }
 
     return responseData;

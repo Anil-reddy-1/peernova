@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { useChatSocket } from '@/lib/useChatSocket';
 import { Spinner, Input, Button } from '@peer-tutoring/ui';
-import { Search, Send, Paperclip } from 'lucide-react';
+import { Search, Send, Paperclip, FileText, Download } from 'lucide-react';
 import { format } from 'date-fns';
 
 const parseDate = (val: any) => {
@@ -25,7 +25,9 @@ export default function MessagesPage() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { socket, joinChat, leaveChat } = useChatSocket();
 
@@ -120,9 +122,9 @@ export default function MessagesPage() {
 
   // Send message mutation
   const sendMutation = useMutation({
-    mutationFn: async (content: string) => {
+    mutationFn: async (payload: { content: string; type?: string; fileURL?: string; fileType?: string }) => {
       if (!activeChatId) throw new Error('No active chat');
-      return api.chat.sendMessage(activeChatId, { content });
+      return api.chat.sendMessage(activeChatId, payload);
     },
     onSuccess: (res: any) => {
       setMessageInput('');
@@ -138,7 +140,53 @@ export default function MessagesPage() {
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     if (!messageInput.trim() || !activeChatId) return;
-    sendMutation.mutate(messageInput.trim());
+    sendMutation.mutate({ content: messageInput.trim() });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeChatId) return;
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      // 1. Get Signature
+      const sigRes: any = await api.chat.getUploadSignature();
+      const { timestamp, signature, apiKey, cloudName } = sigRes.data.data;
+
+      // 2. Upload to Cloudinary
+      const formData = new FormData();
+      formData.append('api_key', apiKey);
+      formData.append('timestamp', timestamp.toString());
+      formData.append('folder', 'chat-files');
+      formData.append('signature', signature);
+      formData.append('file', file);
+
+      const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await uploadRes.json();
+      if (!uploadRes.ok) throw new Error(data.error?.message || 'Upload failed');
+
+      // 3. Send message
+      await sendMutation.mutateAsync({
+        content: file.name,
+        type: 'file',
+        fileURL: data.secure_url,
+        fileType: file.type,
+      });
+    } catch (err) {
+      console.error('File upload failed', err);
+      alert('Failed to upload file.');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const activeChat = conversations.find((c: any) => c.id === activeChatId);
@@ -280,7 +328,32 @@ export default function MessagesPage() {
                           ? 'rounded-tr-sm bg-primary-600 text-white' 
                           : 'rounded-tl-sm bg-white dark:bg-surface-800 text-surface-900 dark:text-white border border-surface-200 dark:border-surface-700'
                       }`}>
-                        <p className="break-words">{msg.content}</p>
+                        {msg.type === 'file' ? (
+                          msg.fileType?.startsWith('image/') ? (
+                            <div className="mt-1 mb-2">
+                              <a href={msg.fileURL} target="_blank" rel="noopener noreferrer">
+                                <img src={msg.fileURL} alt="Attachment" className="max-w-full h-auto max-h-[300px] rounded-lg object-contain" />
+                              </a>
+                            </div>
+                          ) : (
+                            <a 
+                              href={msg.fileURL} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className={`flex items-center gap-3 p-3 mt-1 mb-2 rounded-xl transition-colors ${isMe ? 'bg-primary-700 hover:bg-primary-800' : 'bg-surface-100 dark:bg-surface-900 hover:bg-surface-200 dark:hover:bg-surface-950'}`}
+                            >
+                              <div className={`p-2 rounded-lg ${isMe ? 'bg-primary-600' : 'bg-surface-200 dark:bg-surface-800'}`}>
+                                <FileText className="w-5 h-5" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{msg.content || 'Document'}</p>
+                              </div>
+                              <Download className="w-4 h-4 opacity-70" />
+                            </a>
+                          )
+                        ) : (
+                          <p className="break-words">{msg.content}</p>
+                        )}
                         <p className={`text-[10px] mt-1 text-right ${isMe ? 'text-primary-200' : 'text-surface-400'}`}>
                           {parseDate(msg.createdAt) ? format(parseDate(msg.createdAt)!, 'h:mm a') : ''}
                         </p>
@@ -295,18 +368,30 @@ export default function MessagesPage() {
             {/* Message Input */}
             <form onSubmit={handleSend} className="p-4 bg-white/50 dark:bg-surface-950/50 border-t border-surface-200 dark:border-surface-800">
               <div className="flex gap-2 items-center">
-                <button type="button" className="p-2 text-surface-400 hover:text-primary-600 transition-colors">
-                  <Paperclip className="w-5 h-5" />
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  className="hidden" 
+                  onChange={handleFileUpload} 
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                />
+                <button 
+                  type="button" 
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="p-2 text-surface-400 hover:text-primary-600 transition-colors disabled:opacity-50"
+                >
+                  {isUploading ? <Spinner className="w-5 h-5 text-primary-600" /> : <Paperclip className="w-5 h-5" />}
                 </button>
                 <input
                   type="text"
                   placeholder="Type your message..."
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
-                  disabled={sendMutation.isPending}
-                  className="flex-1 px-4 py-2.5 rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900 focus:ring-2 focus:ring-primary-500 outline-none"
+                  disabled={sendMutation.isPending || isUploading}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-900 focus:ring-2 focus:ring-primary-500 outline-none disabled:opacity-50"
                 />
-                <Button type="submit" disabled={!messageInput.trim() || sendMutation.isPending} className="px-6 rounded-xl">
+                <Button type="submit" disabled={!messageInput.trim() || sendMutation.isPending || isUploading} className="px-6 rounded-xl">
                   {sendMutation.isPending ? <Spinner className="w-5 h-5" /> : <Send className="w-5 h-5" />}
                 </Button>
               </div>

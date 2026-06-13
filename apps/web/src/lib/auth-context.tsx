@@ -56,16 +56,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (firebaseUser) {
           setUser(firebaseUser);
 
-          // Get role from custom claims
-          const tokenResult = await firebaseUser.getIdTokenResult();
-          const userRole = (tokenResult.claims.role as UserRole) || null;
-          setRole(userRole);
-
+          // Get role from custom claims, force refresh to ensure latest claims after relogin
+          const tokenResult = await firebaseUser.getIdTokenResult(true);
+          let userRole = (tokenResult.claims.role as UserRole) || null;
+          
           // Fetch user profile from Firestore
           const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
           if (userDoc.exists()) {
-            setUserProfile(userDoc.data() as BaseUser);
+            const profileData = userDoc.data() as BaseUser;
+            setUserProfile(profileData);
+            // Use Firestore role as source of truth if available
+            if (profileData.role) {
+              userRole = profileData.role;
+            }
           }
+          
+          setRole(userRole);
 
           // Set session cookie for middleware
           const token = await firebaseUser.getIdToken();

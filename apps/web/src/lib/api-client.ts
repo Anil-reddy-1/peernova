@@ -62,6 +62,7 @@ export const api = {
     create: (data: unknown) => apiClient.post<ApiResponse<unknown>>('/sessions', data),
     list: (params?: Record<string, unknown>) => apiClient.get<ApiResponse<unknown>>('/sessions', { params }),
     getById: (id: string) => apiClient.get<ApiResponse<unknown>>(`/sessions/${id}`),
+    updateStatus: (id: string, status: string) => apiClient.patch<ApiResponse<unknown>>(`/sessions/${id}/status`, { status }),
     cancel: (id: string, reason?: string) => apiClient.post<ApiResponse<unknown>>(`/sessions/${id}/cancel`, { reason }),
     confirmPayment: (id: string, paymentId: string) => apiClient.post<ApiResponse<unknown>>(`/sessions/${id}/confirm-payment`, { paymentId }),
   },
@@ -89,6 +90,7 @@ export const api = {
       apiClient.get<ApiResponse<unknown>>(`/chat/${chatId}/messages`, { params }),
     sendMessage: (chatId: string, data: unknown) =>
       apiClient.post<ApiResponse<unknown>>(`/chat/${chatId}/messages`, data),
+    getUploadSignature: () => apiClient.get<ApiResponse<{ timestamp: number; signature: string; apiKey: string; cloudName: string }>>('/chat/upload-signature'),
   },
   users: {
     search: (q: string) => apiClient.get<ApiResponse<unknown>>('/users/search', { params: { q } }),

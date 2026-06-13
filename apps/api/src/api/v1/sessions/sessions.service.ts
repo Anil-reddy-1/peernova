@@ -230,8 +230,8 @@ export class SessionsService {
     const session = sessionDoc.data() as Session;
     if (session.tutorId !== tutorId) throw new ForbiddenError('Unauthorized');
 
-    if (status === 'in_progress' && session.status !== 'confirmed') {
-      throw new ConflictError('Can only start a confirmed session');
+    if (status === 'in_progress' && !['confirmed', 'pending'].includes(session.status)) {
+      throw new ConflictError('Can only start a confirmed or pending session');
     }
     if (status === 'completed' && session.status !== 'in_progress') {
       throw new ConflictError('Can only complete an in-progress session');

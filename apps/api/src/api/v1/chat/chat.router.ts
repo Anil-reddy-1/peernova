@@ -13,4 +13,6 @@ chatRouter.get('/:chatId/messages', authenticate, chatController.getMessages);
 // REST fallback for sending messages (also handled via Socket.IO)
 chatRouter.post('/:chatId/messages', authenticate, chatController.sendMessage);
 
+chatRouter.get('/upload-signature', authenticate, chatController.getUploadSignature);
+
 chatRouter.get('/turn-credentials', authenticate, chatController.getTurnCredentials);
