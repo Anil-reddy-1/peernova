@@ -62,20 +62,52 @@ export default function HomePage() {
       <section id="how-it-works" className="py-24 bg-surface-50 dark:bg-surface-900/50">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Get started in <span className="gradient-text">3 simple steps</span></h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">How <span className="gradient-text">PeerNova</span> Works</h2>
+            <p className="text-lg text-surface-500 max-w-2xl mx-auto">A seamless experience whether you want to learn or teach.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            {[
-              { step: '01', title: 'Find a Tutor', desc: 'Browse expert tutors filtered by subject, rating, price, and availability.' },
-              { step: '02', title: 'Book a Session', desc: 'Choose a time slot, make a secure payment, and get instant confirmation.' },
-              { step: '03', title: 'Start Learning', desc: 'Join your HD video session, ask questions, and ace your goals.' },
-            ].map((item) => (
-              <div key={item.step} className="relative glass-card rounded-2xl p-8 hover-lift">
-                <div className="text-5xl font-black text-primary-100 dark:text-primary-900/30 absolute top-4 right-6">{item.step}</div>
-                <h3 className="text-xl font-semibold text-surface-900 dark:text-white mb-3 relative">{item.title}</h3>
-                <p className="text-surface-500 relative">{item.desc}</p>
+
+          <div className="grid lg:grid-cols-2 gap-16">
+            {/* For Students */}
+            <div>
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 rounded-xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-2xl">📚</div>
+                <h3 className="text-2xl font-bold text-surface-900 dark:text-white">For Students</h3>
               </div>
-            ))}
+              <div className="space-y-6">
+                {[
+                  { step: '01', title: 'Find your tutor', desc: 'Browse our community of expert tutors filtered by subject, rating, price, and availability.' },
+                  { step: '02', title: 'Book a session', desc: 'Choose a time slot that works for you, make a secure payment, and get instant confirmation.' },
+                  { step: '03', title: 'Start learning', desc: 'Join the HD video call directly from your dashboard, ask questions, and ace your goals.' },
+                ].map((item) => (
+                  <div key={item.step} className="relative glass-card rounded-2xl p-6 hover-lift border-l-4 border-l-primary-500">
+                    <div className="text-4xl font-black text-primary-100 dark:text-primary-900/30 absolute top-4 right-6">{item.step}</div>
+                    <h4 className="text-lg font-semibold text-surface-900 dark:text-white mb-2 relative">{item.title}</h4>
+                    <p className="text-surface-500 text-sm relative pr-8">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* For Tutors */}
+            <div>
+              <div className="flex items-center gap-4 mb-8">
+                <div className="w-12 h-12 rounded-xl bg-secondary-100 dark:bg-secondary-900/30 flex items-center justify-center text-2xl">🎓</div>
+                <h3 className="text-2xl font-bold text-surface-900 dark:text-white">For Tutors</h3>
+              </div>
+              <div className="space-y-6">
+                {[
+                  { step: '01', title: 'Create a profile', desc: 'Sign up, list the subjects you master, set your own hourly rate, and define your availability.' },
+                  { step: '02', title: 'Accept bookings', desc: 'Students will find you and book sessions. You have full control to manage your schedule.' },
+                  { step: '03', title: 'Teach and earn', desc: 'Host 1-on-1 video sessions using our built-in tools, and get paid securely after every session.' },
+                ].map((item) => (
+                  <div key={item.step} className="relative glass-card rounded-2xl p-6 hover-lift border-l-4 border-l-secondary-500">
+                    <div className="text-4xl font-black text-secondary-100 dark:text-secondary-900/30 absolute top-4 right-6">{item.step}</div>
+                    <h4 className="text-lg font-semibold text-surface-900 dark:text-white mb-2 relative">{item.title}</h4>
+                    <p className="text-surface-500 text-sm relative pr-8">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
