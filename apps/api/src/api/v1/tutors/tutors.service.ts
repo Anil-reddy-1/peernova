@@ -87,7 +87,7 @@ export class TutorsService {
     };
   }
 
-  async getTutorById(tutorId: string): Promise<TutorProfile & { displayName: string; photoURL: string | null }> {
+  async getTutorById(tutorId: string): Promise<TutorProfile & { id: string; displayName: string; photoURL: string | null }> {
     const doc = await this.db.collection('tutors').doc(tutorId).get();
     if (!doc.exists) {
       throw new NotFoundError('Tutor', tutorId);
