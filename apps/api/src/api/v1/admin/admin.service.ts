@@ -9,6 +9,7 @@ export class AdminService {
     const usersCount = await this.db.collection('users').count().get();
     const tutorsCount = await this.db.collection('tutors').count().get();
     const sessionsCount = await this.db.collection('sessions').count().get();
+    const reportsCount = await this.db.collection('reports').count().get();
     
     // Revenue logic would require summing up captured payments, 
     // for simplicity, we return counts.
@@ -17,6 +18,7 @@ export class AdminService {
       totalUsers: usersCount.data().count,
       totalTutors: tutorsCount.data().count,
       totalSessions: sessionsCount.data().count,
+      totalReports: reportsCount.data().count,
     };
   }
 

@@ -5,7 +5,8 @@ import { useTutorProfile, useTutorAvailability } from '@/hooks/useTutors';
 import { useAuth } from '@/lib/auth-context';
 import { useParams, useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
-import { Star, MessageSquare, BookOpen, Clock, Calendar, CheckCircle2, IndianRupee, MapPin, GraduationCap, ShieldCheck } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { Star, MessageSquare, BookOpen, Clock, Calendar, CheckCircle2, IndianRupee, MapPin, GraduationCap, ShieldCheck, Flag } from 'lucide-react';
 
 
 export default function TutorProfilePage() {
@@ -24,6 +25,25 @@ export default function TutorProfilePage() {
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4000);
+  };
+
+  const reportMutation = useMutation({
+    mutationFn: async ({ id, reason }: { id: string, reason: string }) => {
+      return apiClient.post(`/users/${id}/report`, { reason });
+    },
+    onSuccess: () => {
+      showToast('success', 'User reported successfully');
+    },
+    onError: () => {
+      showToast('error', 'Failed to report user');
+    }
+  });
+
+  const handleReport = () => {
+    const reason = prompt('Enter reason for reporting this tutor:');
+    if (reason) {
+      reportMutation.mutate({ id, reason });
+    }
   };
 
   const handleBook = async () => {
@@ -141,7 +161,7 @@ export default function TutorProfilePage() {
                   </div>
                 </div>
                 
-                <div className="pb-1 w-full sm:w-auto flex sm:block">
+                <div className="pb-1 w-full sm:w-auto flex flex-col sm:flex-row gap-3">
 
                   <button
                     onClick={async () => {
@@ -157,6 +177,14 @@ export default function TutorProfilePage() {
                   >
                     <MessageSquare className="w-4 h-4" />
                     Message
+                  </button>
+
+                  <button
+                    onClick={handleReport}
+                    className="w-full sm:w-auto px-4 py-2 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-xl font-medium text-sm transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Flag className="w-4 h-4" />
+                    Report
                   </button>
                 </div>
               </div>

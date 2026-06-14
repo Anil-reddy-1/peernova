@@ -193,6 +193,46 @@ export class UsersController {
       next(error);
     }
   }
+
+  async reportUser(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { id } = req.params;
+      const reporterId = req.user!.uid;
+      const { reason } = req.body;
+
+      if (!reason) {
+        res.status(400).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: { code: 'VALIDATION_ERROR', message: 'Reason is required', details: null }
+        });
+        return;
+      }
+
+      const db = getFirestore();
+      const reportRef = db.collection('reports').doc();
+      
+      await reportRef.set({
+        id: reportRef.id,
+        reportedUserId: id,
+        reporterId,
+        reason,
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+
+      res.status(201).json({
+        success: true,
+        data: { message: 'User reported successfully', reportId: reportRef.id },
+        meta: null,
+        error: null
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export const usersController = new UsersController();

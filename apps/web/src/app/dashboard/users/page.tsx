@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { Spinner, EmptyState } from '@peer-tutoring/ui';
 import { format } from 'date-fns';
+import { parseDate } from '@/lib/date-utils';
 
 export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
@@ -108,7 +109,7 @@ export default function AdminUsersPage() {
                         {(user.status || 'unknown').toUpperCase()}
                       </span>
                     </td>
-                    <td className="p-4 text-sm text-surface-500">{user.createdAt ? format(new Date(user.createdAt), 'MMM d, yyyy') : '-'}</td>
+                    <td className="p-4 text-sm text-surface-500">{user.createdAt && parseDate(user.createdAt) ? format(parseDate(user.createdAt) as Date, 'MMM d, yyyy') : '-'}</td>
                     <td className="p-4 text-right">
                       <button className="text-primary-600 hover:text-primary-700 font-medium text-sm mr-3">Edit</button>
                       <button 

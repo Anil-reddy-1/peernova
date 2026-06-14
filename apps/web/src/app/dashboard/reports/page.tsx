@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { Spinner, EmptyState } from '@peer-tutoring/ui';
 import { format } from 'date-fns';
+import { parseDate } from '@/lib/date-utils';
 
 export default function AdminReportsPage() {
   const [page, setPage] = useState(1);
@@ -88,7 +89,7 @@ export default function AdminReportsPage() {
                   Reason: <span className="font-medium">{report.reason}</span>
                 </p>
                 <div className="text-xs text-surface-400 mt-2">
-                  Report ID: {report.id} • {report.createdAt ? format(new Date(report.createdAt), 'MMM d, yyyy') : '-'}
+                  Report ID: {report.id} • {report.createdAt && parseDate(report.createdAt) ? format(parseDate(report.createdAt) as Date, 'MMM d, yyyy') : '-'}
                 </div>
               </div>
 

@@ -4,6 +4,7 @@ import { useAdminStats, useAdminReports } from '@/hooks/useAdmin';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { parseDate } from '@/lib/date-utils';
 
 export default function AdminDashboardPage() {
   const { role } = useAuth();
@@ -73,7 +74,7 @@ export default function AdminDashboardPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-sm text-surface-500">
-                      {new Date(report.createdAt).toLocaleDateString()}
+                      {report.createdAt && parseDate(report.createdAt) ? parseDate(report.createdAt)?.toLocaleDateString() : '-'}
                     </td>
                   </tr>
                 ))}

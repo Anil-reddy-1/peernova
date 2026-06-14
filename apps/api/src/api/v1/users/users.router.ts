@@ -191,4 +191,34 @@ usersRouter.get('/:id', authenticate, notImplemented);
  */
 usersRouter.patch('/:id', authenticate, usersController.updateUser);
 
+/**
+ * @swagger
+ * /api/v1/users/{id}/report:
+ *   post:
+ *     tags: [Users]
+ *     summary: Report a user
+ *     description: Report a user for inappropriate behavior
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User reported successfully
+ */
+usersRouter.post('/:id/report', authenticate, usersController.reportUser);
+
 

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { Spinner, EmptyState } from '@peer-tutoring/ui';
 import { format } from 'date-fns';
+import { parseDate } from '@/lib/date-utils';
 
 export default function AdminPaymentsPage() {
   const [page, setPage] = useState(1);
@@ -96,7 +97,7 @@ export default function AdminPaymentsPage() {
                         {(pay.status || 'unknown').toUpperCase()}
                       </span>
                     </td>
-                    <td className="p-4 text-sm text-surface-500">{pay.createdAt ? format(new Date(pay.createdAt), 'MMM d, yyyy h:mm a') : '-'}</td>
+                    <td className="p-4 text-sm text-surface-500">{pay.createdAt && parseDate(pay.createdAt) ? format(parseDate(pay.createdAt) as Date, 'MMM d, yyyy h:mm a') : '-'}</td>
                   </tr>
                 ))}
               </tbody>

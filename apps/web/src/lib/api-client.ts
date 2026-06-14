@@ -96,6 +96,7 @@ export const api = {
     search: (q: string) => apiClient.get<ApiResponse<unknown>>('/users/search', { params: { q } }),
     list: (params?: Record<string, unknown>) => apiClient.get<ApiResponse<unknown>>('/users', { params }),
     update: (id: string, data: unknown) => apiClient.patch<ApiResponse<unknown>>(`/users/${id}`, data),
+    report: (id: string, reason: string) => apiClient.post<ApiResponse<unknown>>(`/users/${id}/report`, { reason }),
   },
   admin: {
     getDashboard: () => apiClient.get<ApiResponse<unknown>>('/admin/dashboard'),

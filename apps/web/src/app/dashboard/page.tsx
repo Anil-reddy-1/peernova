@@ -4,9 +4,10 @@ import { useAuth } from '@/lib/auth-context';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 import { Spinner } from '@peer-tutoring/ui';
-import { Calendar, Clock, Users, IndianRupee, Star, AlertCircle, Inbox, GraduationCap, Video } from 'lucide-react';
+import { Calendar, Clock, Users, IndianRupee, Star, AlertCircle, Inbox, GraduationCap, Video, Flag } from 'lucide-react';
 import { format } from 'date-fns';
 import Link from 'next/link';
+import { parseDate } from '@/lib/date-utils';
 
 export default function DashboardPage() {
   const { userProfile, role } = useAuth();
@@ -26,6 +27,16 @@ export default function DashboardPage() {
     queryKey: ['admin-dashboard-stats'],
     queryFn: async () => {
       const res = await api.admin.getDashboard();
+      return res.data;
+    },
+    enabled: role === 'admin',
+  });
+
+  // Fetch recent reports for admin
+  const { data: recentReportsRes, isLoading: recentReportsLoading } = useQuery({
+    queryKey: ['admin-recent-reports'],
+    queryFn: async () => {
+      const res = await api.admin.getReports({ page: 1, limit: 5 });
       return res.data;
     },
     enabled: role === 'admin',
@@ -74,7 +85,7 @@ export default function DashboardPage() {
       { label: 'Total Users', value: adminStats.totalUsers?.toString() || '0', icon: <Users className="w-6 h-6 text-primary-500" /> },
       { label: 'Total Tutors', value: adminStats.totalTutors?.toString() || '0', icon: <GraduationCap className="w-6 h-6 text-secondary-500" /> },
       { label: 'Total Sessions', value: adminStats.totalSessions?.toString() || '0', icon: <Calendar className="w-6 h-6 text-accent-500" /> },
-      { label: 'Reports', value: '0', icon: <AlertCircle className="w-6 h-6 text-red-500" /> },
+      { label: 'Total Reports', value: adminStats.totalReports?.toString() || '0', icon: <AlertCircle className="w-6 h-6 text-red-500" /> },
     ];
   }
 
@@ -82,7 +93,7 @@ export default function DashboardPage() {
 
   // Get recent 5 sessions
   const recentSessions = sessions
-    .sort((a: any, b: any) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
+    .sort((a: any, b: any) => (parseDate(b.startTime)?.getTime() || 0) - (parseDate(a.startTime)?.getTime() || 0))
     .slice(0, 5);
 
   return (
@@ -114,22 +125,54 @@ export default function DashboardPage() {
 
       {/* Recent Activity */}
       <div className="glass-card rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-surface-900 dark:text-white mb-6">Recent Activity</h2>
+        <h2 className="text-lg font-semibold text-surface-900 dark:text-white mb-6">{role === 'admin' ? 'Recent Reports' : 'Recent Activity'}</h2>
         
         {role === 'admin' ? (
-           <div className="text-center py-12 text-surface-400">
-             <Inbox className="w-12 h-12 mx-auto mb-3 opacity-50" />
-             <p className="font-medium text-surface-900 dark:text-white">Platform running smoothly</p>
-             <p className="text-sm mt-1">No urgent activity to report</p>
-           </div>
+           recentReportsLoading ? (
+             <div className="flex justify-center py-8"><Spinner className="w-6 h-6 text-primary" /></div>
+           ) : (recentReportsRes as any)?.data?.length > 0 ? (
+             <div className="space-y-4">
+               {((recentReportsRes as any)?.data).map((report: any) => (
+                 <div key={report.id} className="flex items-center justify-between p-4 rounded-xl border border-surface-200 dark:border-surface-800 bg-surface-50/50 dark:bg-surface-900/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors">
+                   <div className="flex items-center gap-4">
+                     <div className="p-3 bg-white dark:bg-surface-800 shadow-sm rounded-lg border border-surface-200 dark:border-surface-700">
+                       <Flag className="w-5 h-5 text-red-500" />
+                     </div>
+                     <div>
+                       <h3 className="font-semibold text-surface-900 dark:text-white">User: {report.reportedUserId || 'Unknown'}</h3>
+                       <p className="text-sm text-surface-500">{report.reason}</p>
+                     </div>
+                   </div>
+                   <div className="flex flex-col items-end gap-2">
+                     <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${
+                       report.status === 'resolved' ? 'bg-green-100 text-green-700 dark:bg-green-500/10 dark:text-green-400' :
+                       report.status === 'investigating' ? 'bg-warning-100 text-warning-700 dark:bg-warning-500/10 dark:text-warning-400' :
+                       'bg-error-100 text-error-700 dark:bg-error-500/10 dark:text-error-400'
+                     }`}>
+                       {(report.status || 'pending').charAt(0).toUpperCase() + (report.status || 'pending').slice(1)}
+                     </span>
+                     <Link href="/dashboard/reports" className="btn-primary py-1 px-3 text-xs flex items-center gap-1">
+                       View Reports
+                     </Link>
+                   </div>
+                 </div>
+               ))}
+             </div>
+           ) : (
+             <div className="text-center py-12 text-surface-400">
+               <Inbox className="w-12 h-12 mx-auto mb-3 opacity-50" />
+               <p className="font-medium text-surface-900 dark:text-white">Platform running smoothly</p>
+               <p className="text-sm mt-1">No urgent activity to report</p>
+             </div>
+           )
         ) : recentSessions.length > 0 ? (
           <div className="space-y-4">
             {recentSessions.map((session: any) => {
-              const startTime = new Date(session.startTime);
+              const startTime = parseDate(session.startTime);
               const canJoin = 
                 (role === 'tutor' && ['pending', 'confirmed', 'in_progress'].includes(session.status)) ||
                 (session.status === 'in_progress') ||
-                (['pending', 'confirmed'].includes(session.status) &&
+                (startTime && ['pending', 'confirmed'].includes(session.status) &&
                   now >= new Date(startTime.getTime() - 10 * 60 * 1000));
               
               return (
@@ -140,7 +183,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-surface-900 dark:text-white">{session.subject} Session</h3>
-                    <p className="text-sm text-surface-500">{format(startTime, 'MMM d, yyyy • h:mm a')}</p>
+                    <p className="text-sm text-surface-500">{startTime ? format(startTime, 'MMM d, yyyy • h:mm a') : '-'}</p>
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-2">
