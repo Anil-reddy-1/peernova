@@ -30,7 +30,7 @@ export class ChatService {
         throw new Error(`Metered API error: ${createRes.status} ${createRes.statusText}`);
       }
 
-      const { apiKey } = await createRes.json();
+      const { apiKey } = (await createRes.json()) as any;
 
       // Then fetch the full iceServers array using the generated apiKey
       const turnRes = await fetch(
