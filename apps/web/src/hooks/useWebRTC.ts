@@ -28,6 +28,7 @@ export function useWebRTC(roomId: string) {
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteSocketIdRef = useRef<string | null>(null);
   const toggleScreenShareRef = useRef<(() => void) | null>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
 
   // ─── Initialize Media and WebRTC Peer Connection ───
   useEffect(() => {
@@ -176,6 +177,19 @@ export function useWebRTC(roomId: string) {
       remoteSocketIdRef.current = senderSocketId;
       if (pcRef.current) {
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // Flush pending candidates
+        while (pendingCandidatesRef.current.length > 0) {
+          const candidate = pendingCandidatesRef.current.shift();
+          if (candidate) {
+            try {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+              console.error('Failed to add queued candidate', e);
+            }
+          }
+        }
+
         const answer = await pcRef.current.createAnswer();
         await pcRef.current.setLocalDescription(answer);
         socket.emit('video:answer', { targetSocketId: senderSocketId, answer, roomId });
@@ -186,16 +200,33 @@ export function useWebRTC(roomId: string) {
     const handleAnswer = async ({ answer }: { answer: any }) => {
       if (pcRef.current) {
         await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
+        
+        // Flush pending candidates
+        while (pendingCandidatesRef.current.length > 0) {
+          const candidate = pendingCandidatesRef.current.shift();
+          if (candidate) {
+            try {
+              await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (e) {
+              console.error('Failed to add queued candidate', e);
+            }
+          }
+        }
       }
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleIceCandidate = async ({ candidate }: { candidate: any }) => {
       if (pcRef.current) {
-        try {
-          await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (err) {
-          console.error('Failed to add ICE candidate', err);
+        if (pcRef.current.remoteDescription) {
+          try {
+            await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+          } catch (err) {
+            console.error('Failed to add ICE candidate', err);
+          }
+        } else {
+          // Queue candidate if remote description is not set yet
+          pendingCandidatesRef.current.push(candidate);
         }
       }
     };
