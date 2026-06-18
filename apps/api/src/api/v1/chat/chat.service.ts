@@ -12,6 +12,17 @@ export class ChatService {
     const staticPassword = process.env.METERED_STATIC_PASSWORD;
     const credentialApiKey = process.env.METERED_API_KEY;
 
+    // --- Environment Variable Checks ---
+    if (!domain) {
+      console.error('🚨 WebRTC CRITICAL: METERED_DOMAIN is missing in environment variables!');
+    }
+    if (!staticUsername && !credentialApiKey && !secretKey) {
+      console.error('🚨 WebRTC CRITICAL: Missing Metered Auth! You must provide METERED_API_KEY, METERED_STATIC_USERNAME/PASSWORD, or METERED_SECRET_KEY.');
+    }
+    if (secretKey && !credentialApiKey && !staticUsername) {
+      console.warn('⚠️ WebRTC WARNING: Using METERED_SECRET_KEY will dynamically create new credentials and quickly exhaust the Free Tier limit. We strongly recommend setting METERED_API_KEY instead.');
+    }
+
     // 1. Use static credentials if provided (fastest, no API call needed)
     if (domain && staticUsername && staticPassword) {
       return {
@@ -31,9 +42,11 @@ export class ChatService {
         if (turnRes.ok) {
           const iceServers = await turnRes.json();
           return { iceServers };
+        } else {
+          console.error(`🚨 WebRTC CRITICAL: Failed to fetch TURN credentials with API Key. Metered returned ${turnRes.status} ${turnRes.statusText}`);
         }
       } catch (e) {
-        console.warn('Failed to fetch static API key credentials:', e);
+        console.error('🚨 WebRTC CRITICAL: Failed to fetch static API key credentials:', e);
       }
     }
 
