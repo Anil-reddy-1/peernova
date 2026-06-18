@@ -19,15 +19,28 @@ export class ChatService {
       };
     }
 
-    const response = await fetch(
-      `https://${domain}/api/v1/turn/credentials?apiKey=${secretKey}`
+    // First generate a temporary credential using the secretKey
+    const createRes = await fetch(
+      `https://${domain}/api/v1/turn/credential?secretKey=${secretKey}`,
+      { method: 'POST' }
     );
 
-    if (!response.ok) {
-      throw new Error(`Metered API error: ${response.status} ${response.statusText}`);
+    if (!createRes.ok) {
+      throw new Error(`Metered API error: ${createRes.status} ${createRes.statusText}`);
     }
 
-    const iceServers = await response.json();
+    const { apiKey } = await createRes.json();
+
+    // Then fetch the full iceServers array using the generated apiKey
+    const turnRes = await fetch(
+      `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`
+    );
+
+    if (!turnRes.ok) {
+      throw new Error(`Metered API error: ${turnRes.status} ${turnRes.statusText}`);
+    }
+
+    const iceServers = await turnRes.json();
     return { iceServers };
   }
 

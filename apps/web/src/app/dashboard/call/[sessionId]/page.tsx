@@ -47,6 +47,7 @@ export default function VideoCallPage() {
     isAudioEnabled,
     isScreenSharing,
     connectionState,
+    mediaError,
     toggleVideo,
     toggleAudio,
     toggleScreenShare,
@@ -247,18 +248,25 @@ export default function VideoCallPage() {
 
           <div className="flex gap-4 justify-center mb-8">
             <div className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center">
-                <Video size={20} className="text-primary-500" />
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${mediaError ? 'bg-red-100 dark:bg-red-900/30' : 'bg-surface-100 dark:bg-surface-800'}`}>
+                <Video size={20} className={mediaError ? 'text-red-500' : 'text-primary-500'} />
               </div>
               <span className="text-xs text-surface-500">Camera</span>
             </div>
             <div className="flex flex-col items-center gap-2">
-              <div className="w-12 h-12 rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center">
-                <Mic size={20} className="text-primary-500" />
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${mediaError ? 'bg-red-100 dark:bg-red-900/30' : 'bg-surface-100 dark:bg-surface-800'}`}>
+                <Mic size={20} className={mediaError ? 'text-red-500' : 'text-primary-500'} />
               </div>
               <span className="text-xs text-surface-500">Microphone</span>
             </div>
           </div>
+
+          {mediaError && (
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl text-left flex gap-3">
+              <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={20} />
+              <p className="text-sm text-red-600 dark:text-red-400 leading-relaxed">{mediaError}</p>
+            </div>
+          )}
 
           <button
             onClick={handleJoinCall}

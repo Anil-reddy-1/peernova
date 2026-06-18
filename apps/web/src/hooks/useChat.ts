@@ -16,6 +16,7 @@ export function useChat(roomId: string) {
   const [isTyping, setIsTyping] = useState(false);
 
   useEffect(() => {
+    if (!roomId) return;
     // Load historical messages
     apiClient.get(`/chat/${roomId}/messages`).then(res => {
       setMessages(res.data.data.reverse()); // Assuming desc from API
@@ -23,7 +24,7 @@ export function useChat(roomId: string) {
   }, [roomId]);
 
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!roomId || !socket || !isConnected) return;
 
     socket.emit('chat:join', roomId);
 
