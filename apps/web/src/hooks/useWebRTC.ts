@@ -2,6 +2,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useSocket } from './useSocket';
 import { apiClient } from '@/lib/api-client';
 
+interface IceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
 export function useWebRTC(roomId: string) {
   const { socket, isConnected } = useSocket();
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -9,8 +15,9 @@ export function useWebRTC(roomId: string) {
   const [isVideoEnabled, setIsVideoEnabled] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [connectionState, setConnectionState] = useState<RTCPeerConnectionState>('new');
   const [, setRemoteSocketId] = useState<string | null>(null);
-  
+
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteSocketIdRef = useRef<string | null>(null);
@@ -21,24 +28,41 @@ export function useWebRTC(roomId: string) {
     if (!socket || !isConnected) return;
 
     let pc: RTCPeerConnection;
+    let cancelled = false;
 
     const init = async () => {
-      // Get TURN credentials
-      const { data: turnRes } = await apiClient.get('/chat/turn-credentials');
-      
+      // Fetch Metered TURN/STUN credentials from our API
+      let iceServers: IceServer[] = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ];
+
+      try {
+        const { data: turnRes } = await apiClient.get('/chat/turn-credentials');
+        if (turnRes?.data?.iceServers && Array.isArray(turnRes.data.iceServers)) {
+          iceServers = turnRes.data.iceServers;
+        }
+      } catch (err) {
+        console.warn('Failed to fetch TURN credentials, using STUN fallback', err);
+      }
+
+      if (cancelled) return;
+
       const config: RTCConfiguration = {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          {
-            urls: 'turn:YOUR_TURN_SERVER_IP:3478', // Placeholder
-            username: turnRes.data.username,
-            credential: turnRes.data.credential,
-          }
-        ]
+        iceServers,
+        iceCandidatePoolSize: 10,
       };
 
       pc = new RTCPeerConnection(config);
       pcRef.current = pc;
+
+      // Track connection state
+      pc.onconnectionstatechange = () => {
+        setConnectionState(pc.connectionState);
+        if (pc.connectionState === 'failed') {
+          console.error('WebRTC connection failed – may need TURN server');
+        }
+      };
 
       pc.ontrack = (event) => {
         setRemoteStream(event.streams[0]);
@@ -49,16 +73,34 @@ export function useWebRTC(roomId: string) {
           socket.emit('video:ice-candidate', {
             targetSocketId: remoteSocketIdRef.current,
             candidate: event.candidate,
-            roomId
+            roomId,
           });
         }
       };
 
+      // Capture local media
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user',
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
         setLocalStream(stream);
         localStreamRef.current = stream;
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
       } catch (err) {
         console.error('Failed to get user media', err);
       }
@@ -81,7 +123,7 @@ export function useWebRTC(roomId: string) {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleOffer = async ({ offer, senderSocketId }: { offer: any, senderSocketId: string }) => {
+    const handleOffer = async ({ offer, senderSocketId }: { offer: any; senderSocketId: string }) => {
       setRemoteSocketId(senderSocketId);
       remoteSocketIdRef.current = senderSocketId;
       if (pcRef.current) {
@@ -102,23 +144,36 @@ export function useWebRTC(roomId: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleIceCandidate = async ({ candidate }: { candidate: any }) => {
       if (pcRef.current) {
-        await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        try {
+          await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.error('Failed to add ICE candidate', err);
+        }
       }
+    };
+
+    const handleUserLeft = () => {
+      setRemoteStream(null);
+      setRemoteSocketId(null);
+      remoteSocketIdRef.current = null;
     };
 
     socket.on('video:user-joined', handleUserJoined);
     socket.on('video:offer', handleOffer);
     socket.on('video:answer', handleAnswer);
     socket.on('video:ice-candidate', handleIceCandidate);
+    socket.on('video:user-left', handleUserLeft);
 
     return () => {
+      cancelled = true;
       socket.off('video:user-joined', handleUserJoined);
       socket.off('video:offer', handleOffer);
       socket.off('video:answer', handleAnswer);
       socket.off('video:ice-candidate', handleIceCandidate);
-      
+      socket.off('video:user-left', handleUserLeft);
+
       if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
       }
       if (pcRef.current) {
         pcRef.current.close();
@@ -154,19 +209,19 @@ export function useWebRTC(roomId: string) {
         // Revert to camera
         const stream = await navigator.mediaDevices.getUserMedia({ video: true });
         const videoTrack = stream.getVideoTracks()[0];
-        
-        const sender = pcRef.current.getSenders().find(s => s.track?.kind === 'video');
+
+        const sender = pcRef.current.getSenders().find((s) => s.track?.kind === 'video');
         if (sender) sender.replaceTrack(videoTrack);
-        
-        setLocalStream(prev => {
+
+        setLocalStream((prev) => {
           if (prev) {
-            prev.getVideoTracks()[0].stop();
-            prev.removeTrack(prev.getVideoTracks()[0]);
+            prev.getVideoTracks().forEach((t) => t.stop());
+            prev.getVideoTracks().forEach((t) => prev.removeTrack(t));
             prev.addTrack(videoTrack);
           }
           return prev;
         });
-        
+
         setIsScreenSharing(false);
         setIsVideoEnabled(true);
       } else {
@@ -176,17 +231,17 @@ export function useWebRTC(roomId: string) {
 
         screenTrack.onended = () => {
           if (toggleScreenShareRef.current) {
-             toggleScreenShareRef.current();
+            toggleScreenShareRef.current();
           }
         };
 
-        const sender = pcRef.current.getSenders().find(s => s.track?.kind === 'video');
+        const sender = pcRef.current.getSenders().find((s) => s.track?.kind === 'video');
         if (sender) sender.replaceTrack(screenTrack);
 
-        setLocalStream(prev => {
+        setLocalStream((prev) => {
           if (prev) {
-            prev.getVideoTracks()[0].stop();
-            prev.removeTrack(prev.getVideoTracks()[0]);
+            prev.getVideoTracks().forEach((t) => t.stop());
+            prev.getVideoTracks().forEach((t) => prev.removeTrack(t));
             prev.addTrack(screenTrack);
           }
           return prev;
@@ -209,8 +264,9 @@ export function useWebRTC(roomId: string) {
     isVideoEnabled,
     isAudioEnabled,
     isScreenSharing,
+    connectionState,
     toggleVideo,
     toggleAudio,
-    toggleScreenShare
+    toggleScreenShare,
   };
 }

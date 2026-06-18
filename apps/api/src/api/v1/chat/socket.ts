@@ -124,7 +124,12 @@ export function initializeSocket(httpServer: HttpServer): void {
 
     socket.on('disconnect', () => {
       logger.info({ uid: user.uid, socketId: socket.id }, 'User disconnected');
-      // They automatically leave all rooms on disconnect, we could emit video:user-left if needed
+      // Notify video rooms that this user has left
+      socket.rooms.forEach((room) => {
+        if (room.startsWith('video:')) {
+          socket.to(room).emit('video:user-left', { userId: user.uid, socketId: socket.id });
+        }
+      });
     });
   });
 }

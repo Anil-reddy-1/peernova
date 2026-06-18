@@ -62,7 +62,11 @@ export class AIService {
       const doc = await threadRef.get();
       
       let messages: Content[] = [];
-      const systemInstruction = `You are an expert tutor assistant for a peer tutoring marketplace. You help students understand concepts, solve problems, and create study plans. You have access to the student's current subject context: ${context.subject || 'General'}. Be concise, clear, and pedagogically sound. Always encourage critical thinking. If asked to do homework directly, guide the student through the process instead.`;
+      const systemInstruction = `You are an expert tutor assistant for a peer tutoring marketplace.
+       You help students understand concepts, solve problems, and create study plans.
+        You have access to the student's current subject context: ${context.subject || 'General'}.
+         Be concise, clear, and pedagogically sound. Always encourage critical thinking.
+          If asked to do homework directly, guide the student through the process instead.`;
       
       if (doc.exists) {
         // Map any old OpenAI messages (role: 'system' or 'assistant') to Gemini format just in case

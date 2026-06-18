@@ -195,7 +195,7 @@ export default function DashboardPage() {
                     {session.status.charAt(0).toUpperCase() + session.status.slice(1)}
                   </span>
                   {canJoin && (
-                    <Link href={`/call/${session.id}`} className="btn-primary py-1 px-3 text-xs flex items-center gap-1">
+                    <Link href={`/dashboard/call/${session.id}`} className="btn-primary py-1 px-3 text-xs flex items-center gap-1">
                       <Video size={14} /> Join Call
                     </Link>
                   )}

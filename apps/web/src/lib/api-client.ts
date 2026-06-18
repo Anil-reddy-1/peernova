@@ -91,6 +91,7 @@ export const api = {
     sendMessage: (chatId: string, data: unknown) =>
       apiClient.post<ApiResponse<unknown>>(`/chat/${chatId}/messages`, data),
     getUploadSignature: () => apiClient.get<ApiResponse<{ timestamp: number; signature: string; apiKey: string; cloudName: string }>>('/chat/upload-signature'),
+    getTurnCredentials: () => apiClient.get<ApiResponse<{ iceServers: RTCIceServer[] }>>('/chat/turn-credentials'),
   },
   users: {
     search: (q: string) => apiClient.get<ApiResponse<unknown>>('/users/search', { params: { q } }),

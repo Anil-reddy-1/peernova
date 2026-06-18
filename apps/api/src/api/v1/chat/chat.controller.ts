@@ -13,7 +13,7 @@ export class ChatController {
   async getTurnCredentials(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = req.user!.uid;
-      const credentials = chatService.getTurnCredentials(userId);
+      const credentials = await chatService.getTurnCredentials(userId);
 
       res.status(200).json({
         success: true,

@@ -1,26 +1,34 @@
 import { getFirestore, getFieldValue } from '../../../lib/firebase-admin';
 const FieldValue = getFieldValue();
 
-import crypto from 'crypto';
+
 import { NotFoundError } from '../../../lib/errors';
 
 export class ChatService {
-  getTurnCredentials(userId: string) {
-    const turnSecret = process.env.TURN_SECRET || 'dummy_turn_secret';
-    const ttl = 24 * 60 * 60; // 24 hours
-    const unixTimeStamp = Math.floor(Date.now() / 1000) + ttl;
-    const username = `${unixTimeStamp}:${userId}`;
-    const hmac = crypto.createHmac('sha1', turnSecret);
-    hmac.setEncoding('base64');
-    hmac.write(username);
-    hmac.end();
-    const credential = hmac.read() as string;
+  async getTurnCredentials(_userId: string) {
+    const domain = process.env.METERED_DOMAIN;
+    const secretKey = process.env.METERED_SECRET_KEY;
 
-    return {
-      username,
-      credential,
-      ttl
-    };
+    if (!domain || !secretKey) {
+      // Fallback to public STUN only
+      return {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      };
+    }
+
+    const response = await fetch(
+      `https://${domain}/api/v1/turn/credentials?apiKey=${secretKey}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Metered API error: ${response.status} ${response.statusText}`);
+    }
+
+    const iceServers = await response.json();
+    return { iceServers };
   }
 
   async createRoom(userId: string, participantId: string, _initialMessage?: string) {

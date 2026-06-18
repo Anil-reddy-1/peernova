@@ -125,7 +125,7 @@ const SessionCard = memo(({
 
       <div className="mt-auto space-y-3 pt-5 border-t border-surface-100 dark:border-surface-800">
         {canJoin && (
-          <Link href={`/call/${session.id}`} className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 shadow-sm hover:shadow">
+          <Link href={`/dashboard/call/${session.id}`} className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 shadow-sm hover:shadow">
             <Video size={18} />
             {role === 'tutor' ? 'Start Session' : 'Join Video Call'}
           </Link>
