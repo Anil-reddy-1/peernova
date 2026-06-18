@@ -19,6 +19,11 @@ export function useWebRTC(roomId: string) {
   const [mediaError, setMediaError] = useState<string | null>(null);
   const [, setRemoteSocketId] = useState<string | null>(null);
 
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>('');
+  const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>('');
+
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const remoteSocketIdRef = useRef<string | null>(null);
@@ -49,6 +54,23 @@ export function useWebRTC(roomId: string) {
         localStreamRef.current = stream;
         setLocalStream(stream);
         setMediaError(null);
+
+        // Enumerate devices
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setVideoDevices(devices.filter((d) => d.kind === 'videoinput'));
+        setAudioDevices(devices.filter((d) => d.kind === 'audioinput'));
+        
+        const videoTrack = stream.getVideoTracks()[0];
+        if (videoTrack) {
+          const settings = videoTrack.getSettings();
+          if (settings.deviceId) setSelectedVideoDeviceId(settings.deviceId);
+        }
+        
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) {
+          const settings = audioTrack.getSettings();
+          if (settings.deviceId) setSelectedAudioDeviceId(settings.deviceId);
+        }
       } catch (err: any) {
         console.error('Failed to get user media:', err);
         if (err.name === 'NotAllowedError') {
@@ -225,7 +247,11 @@ export function useWebRTC(roomId: string) {
     try {
       if (isScreenSharing) {
         // Revert to camera
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: isAudioEnabled });
+        const constraints: MediaStreamConstraints = { 
+          video: selectedVideoDeviceId ? { deviceId: { exact: selectedVideoDeviceId } } : true, 
+          audio: isAudioEnabled 
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         const videoTrack = stream.getVideoTracks()[0];
 
         const sender = pcRef.current.getSenders().find((s) => s.track?.kind === 'video');
@@ -288,6 +314,58 @@ export function useWebRTC(roomId: string) {
     toggleScreenShareRef.current = toggleScreenShare;
   }, [toggleScreenShare]);
 
+  const switchDevice = useCallback(async (kind: 'videoinput' | 'audioinput', deviceId: string) => {
+    if (!pcRef.current || !localStreamRef.current) return;
+    
+    // If currently screen sharing and switching camera, just save the ID for when screen sharing ends
+    if (kind === 'videoinput' && isScreenSharing) {
+      setSelectedVideoDeviceId(deviceId);
+      return;
+    }
+
+    try {
+      const constraints: MediaStreamConstraints = {};
+      if (kind === 'videoinput') {
+        constraints.video = { deviceId: { exact: deviceId } };
+      } else {
+        constraints.audio = { deviceId: { exact: deviceId } };
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const newTrack = kind === 'videoinput' ? stream.getVideoTracks()[0] : stream.getAudioTracks()[0];
+      const trackKind = kind === 'videoinput' ? 'video' : 'audio';
+      
+      const oldTrack = localStreamRef.current.getTracks().find(t => t.kind === trackKind);
+      
+      if (oldTrack) {
+        oldTrack.stop();
+        localStreamRef.current.removeTrack(oldTrack);
+      }
+      
+      if (newTrack) {
+        localStreamRef.current.addTrack(newTrack);
+        // Ensure track enabled state matches current UI state
+        if (trackKind === 'video') newTrack.enabled = isVideoEnabled;
+        if (trackKind === 'audio') newTrack.enabled = isAudioEnabled;
+        
+        const sender = pcRef.current.getSenders().find(s => s.track?.kind === trackKind);
+        if (sender) {
+          await sender.replaceTrack(newTrack);
+        }
+      }
+      
+      setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+      
+      if (kind === 'videoinput') {
+        setSelectedVideoDeviceId(deviceId);
+      } else {
+        setSelectedAudioDeviceId(deviceId);
+      }
+    } catch (err) {
+      console.error('Failed to switch device:', err);
+    }
+  }, [isScreenSharing, isVideoEnabled, isAudioEnabled]);
+
   return {
     localStream,
     remoteStream,
@@ -296,8 +374,13 @@ export function useWebRTC(roomId: string) {
     isScreenSharing,
     connectionState,
     mediaError,
+    videoDevices,
+    audioDevices,
+    selectedVideoDeviceId,
+    selectedAudioDeviceId,
     toggleVideo,
     toggleAudio,
     toggleScreenShare,
+    switchDevice,
   };
 }

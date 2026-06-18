@@ -19,29 +19,39 @@ export class ChatService {
       };
     }
 
-    // First generate a temporary credential using the secretKey
-    const createRes = await fetch(
-      `https://${domain}/api/v1/turn/credential?secretKey=${secretKey}`,
-      { method: 'POST' }
-    );
+    try {
+      // First generate a temporary credential using the secretKey
+      const createRes = await fetch(
+        `https://${domain}/api/v1/turn/credential?secretKey=${secretKey}`,
+        { method: 'POST' }
+      );
 
-    if (!createRes.ok) {
-      throw new Error(`Metered API error: ${createRes.status} ${createRes.statusText}`);
+      if (!createRes.ok) {
+        throw new Error(`Metered API error: ${createRes.status} ${createRes.statusText}`);
+      }
+
+      const { apiKey } = await createRes.json();
+
+      // Then fetch the full iceServers array using the generated apiKey
+      const turnRes = await fetch(
+        `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`
+      );
+
+      if (!turnRes.ok) {
+        throw new Error(`Metered API error: ${turnRes.status} ${turnRes.statusText}`);
+      }
+
+      const iceServers = await turnRes.json();
+      return { iceServers };
+    } catch (err) {
+      console.warn('Failed to fetch TURN credentials, falling back to STUN:', err);
+      return {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+        ],
+      };
     }
-
-    const { apiKey } = await createRes.json();
-
-    // Then fetch the full iceServers array using the generated apiKey
-    const turnRes = await fetch(
-      `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`
-    );
-
-    if (!turnRes.ok) {
-      throw new Error(`Metered API error: ${turnRes.status} ${turnRes.statusText}`);
-    }
-
-    const iceServers = await turnRes.json();
-    return { iceServers };
   }
 
   async createRoom(userId: string, participantId: string, _initialMessage?: string) {
@@ -103,10 +113,17 @@ export class ChatService {
     const db = getFirestore();
     // Validate room access
     const roomDoc = await db.collection('rooms').doc(roomId).get();
-    if (!roomDoc.exists) throw new NotFoundError('Room', roomId);
+    // If room doesn't exist, it means no messages have been sent yet.
+    // We can just return an empty array.
+    if (!roomDoc.exists) {
+      return {
+        data: [],
+        meta: { page, limit, total: 0, hasMore: false }
+      };
+    }
 
     const roomData = roomDoc.data()!;
-    if (!roomData.participants?.includes(userId)) {
+    if (roomData.participants && !roomData.participants.includes(userId)) {
       throw new NotFoundError('Room', roomId);
     }
 
@@ -143,11 +160,15 @@ export class ChatService {
     const { v4: uuidv4 } = await import('uuid');
 
     const roomDoc = await db.collection('rooms').doc(roomId).get();
-    if (!roomDoc.exists) throw new NotFoundError('Room', roomId);
-
-    const roomData = roomDoc.data()!;
-    if (!roomData.participants?.includes(senderId)) {
-      throw new NotFoundError('Room', roomId);
+    let roomData = roomDoc.data();
+    if (!roomDoc.exists) {
+      // Create the room implicitly if it doesn't exist
+      roomData = { participants: [senderId] };
+      await db.collection('rooms').doc(roomId).set(roomData);
+    } else {
+      if (roomData?.participants && !roomData.participants.includes(senderId)) {
+        throw new NotFoundError('Room', roomId);
+      }
     }
 
     const messageId = uuidv4();

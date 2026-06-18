@@ -23,6 +23,7 @@ import {
   WifiOff,
   AlertTriangle,
   ArrowLeft,
+  Settings,
 } from 'lucide-react';
 import type { Session } from '@peer-tutoring/types';
 
@@ -39,6 +40,7 @@ export default function VideoCallPage() {
   const [callTimer, setCallTimer] = useState(0);
   const [joined, setJoined] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const {
     localStream,
@@ -48,9 +50,14 @@ export default function VideoCallPage() {
     isScreenSharing,
     connectionState,
     mediaError,
+    videoDevices,
+    audioDevices,
+    selectedVideoDeviceId,
+    selectedAudioDeviceId,
     toggleVideo,
     toggleAudio,
     toggleScreenShare,
+    switchDevice,
   } = useWebRTC(joined ? sessionId : '');
 
   const { messages, isTyping, sendMessage, sendTyping } = useChat(joined ? sessionId : '');
@@ -438,6 +445,14 @@ export default function VideoCallPage() {
             )}
           </button>
 
+          <button
+            onClick={() => setSettingsOpen(true)}
+            className="w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 bg-surface-700 hover:bg-surface-600 text-white"
+            title="Device Settings"
+          >
+            <Settings size={20} />
+          </button>
+
           <div className="w-px h-8 bg-surface-700 mx-1" />
 
           <button
@@ -528,6 +543,73 @@ export default function VideoCallPage() {
               <Send size={16} />
             </button>
           </form>
+        </div>
+      )}
+
+      {/* Device Settings Modal */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in p-4">
+          <div className="glass-card max-w-md w-full rounded-2xl overflow-hidden shadow-2xl border border-white/10 animate-slide-up">
+            <div className="h-14 bg-surface-800/80 border-b border-white/5 flex items-center justify-between px-6">
+              <h3 className="font-semibold text-white flex items-center gap-2">
+                <Settings size={18} className="text-primary-400" />
+                Device Settings
+              </h3>
+              <button 
+                onClick={() => setSettingsOpen(false)}
+                className="text-surface-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-surface-300 flex items-center gap-2">
+                  <Video size={16} /> Camera
+                </label>
+                <select
+                  value={selectedVideoDeviceId}
+                  onChange={(e) => switchDevice('videoinput', e.target.value)}
+                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all appearance-none"
+                >
+                  {videoDevices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Camera ${d.deviceId.substring(0, 5)}`}
+                    </option>
+                  ))}
+                  {videoDevices.length === 0 && <option value="">No cameras found</option>}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-surface-300 flex items-center gap-2">
+                  <Mic size={16} /> Microphone
+                </label>
+                <select
+                  value={selectedAudioDeviceId}
+                  onChange={(e) => switchDevice('audioinput', e.target.value)}
+                  className="w-full bg-surface-900 border border-surface-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-all appearance-none"
+                >
+                  {audioDevices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Microphone ${d.deviceId.substring(0, 5)}`}
+                    </option>
+                  ))}
+                  {audioDevices.length === 0 && <option value="">No microphones found</option>}
+                </select>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-surface-800/50 border-t border-white/5 flex justify-end">
+              <button 
+                onClick={() => setSettingsOpen(false)}
+                className="btn-primary py-2 px-6"
+              >
+                Done
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
