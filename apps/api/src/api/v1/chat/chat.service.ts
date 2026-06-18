@@ -8,6 +8,34 @@ export class ChatService {
   async getTurnCredentials(_userId: string) {
     const domain = process.env.METERED_DOMAIN;
     const secretKey = process.env.METERED_SECRET_KEY;
+    const staticUsername = process.env.METERED_STATIC_USERNAME;
+    const staticPassword = process.env.METERED_STATIC_PASSWORD;
+    const credentialApiKey = process.env.METERED_API_KEY;
+
+    // 1. Use static credentials if provided (fastest, no API call needed)
+    if (domain && staticUsername && staticPassword) {
+      return {
+        iceServers: [
+          { urls: `stun:${domain}:80` },
+          { urls: `turn:${domain}:80`, username: staticUsername, credential: staticPassword },
+          { urls: `turn:${domain}:443`, username: staticUsername, credential: staticPassword },
+          { urls: `turn:${domain}:443?transport=tcp`, username: staticUsername, credential: staticPassword },
+        ],
+      };
+    }
+
+    // 2. Fetch using an existing static credential API Key (bypasses creation limits)
+    if (domain && credentialApiKey) {
+      try {
+        const turnRes = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${credentialApiKey}`);
+        if (turnRes.ok) {
+          const iceServers = await turnRes.json();
+          return { iceServers };
+        }
+      } catch (e) {
+        console.warn('Failed to fetch static API key credentials:', e);
+      }
+    }
 
     if (!domain || !secretKey) {
       // Fallback to public STUN only

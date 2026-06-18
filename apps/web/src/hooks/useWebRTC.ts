@@ -165,7 +165,7 @@ export function useWebRTC(roomId: string) {
       setRemoteSocketId(socketId);
       remoteSocketIdRef.current = socketId;
       if (pcRef.current) {
-        const offer = await pcRef.current.createOffer();
+        const offer = await pcRef.current.createOffer({ iceRestart: true });
         await pcRef.current.setLocalDescription(offer);
         socket.emit('video:offer', { targetSocketId: socketId, offer, roomId });
       }
