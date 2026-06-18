@@ -331,16 +331,17 @@ export function useWebRTC(roomId: string) {
         constraints.audio = { deviceId: { exact: deviceId } };
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      const newTrack = kind === 'videoinput' ? stream.getVideoTracks()[0] : stream.getAudioTracks()[0];
       const trackKind = kind === 'videoinput' ? 'video' : 'audio';
-      
       const oldTrack = localStreamRef.current.getTracks().find(t => t.kind === trackKind);
       
+      // Stop the old track first to release the hardware lock (fixes NotReadableError on some OS)
       if (oldTrack) {
         oldTrack.stop();
         localStreamRef.current.removeTrack(oldTrack);
       }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const newTrack = kind === 'videoinput' ? stream.getVideoTracks()[0] : stream.getAudioTracks()[0];
       
       if (newTrack) {
         localStreamRef.current.addTrack(newTrack);
