@@ -6,12 +6,14 @@ const FieldValue = getFieldValue();
 import { logger } from '../../../lib/pino';
 import { v4 as uuidv4 } from 'uuid';
 
+import { corsOptions } from '../../../config/cors';
+
 export let io: SocketIOServer;
 
 export function initializeSocket(httpServer: HttpServer): void {
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:3000'],
+      origin: corsOptions.origin,
       methods: ['GET', 'POST'],
       credentials: true,
     },
