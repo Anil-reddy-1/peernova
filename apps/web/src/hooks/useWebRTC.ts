@@ -122,7 +122,13 @@ export function useWebRTC(roomId: string) {
       };
 
       pc.ontrack = (event) => {
-        setRemoteStream(event.streams[0]);
+        setRemoteStream((prev) => {
+          const stream = prev || new MediaStream();
+          if (!stream.getTracks().includes(event.track)) {
+            stream.addTrack(event.track);
+          }
+          return new MediaStream(stream.getTracks());
+        });
       };
 
       pc.onicecandidate = (event) => {
@@ -135,11 +141,16 @@ export function useWebRTC(roomId: string) {
         }
       };
 
-      // 4. Add tracks BEFORE signaling
+      // 4. Setup transceivers BEFORE signaling to guarantee connection establishes
+      // even if user has no camera/microphone (e.g. permission denied or Device In Use)
+      const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
+      const videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
+
       if (stream) {
-        stream.getTracks().forEach((track) => {
-          pc.addTrack(track, stream!);
-        });
+        const audioTrack = stream.getAudioTracks()[0];
+        const videoTrack = stream.getVideoTracks()[0];
+        if (audioTrack) audioTransceiver.sender.replaceTrack(audioTrack);
+        if (videoTrack) videoTransceiver.sender.replaceTrack(videoTrack);
       }
 
       // 5. Join the signaling room
@@ -283,13 +294,9 @@ export function useWebRTC(roomId: string) {
           }
         };
 
-        const sender = pcRef.current.getSenders().find((s) => s.track?.kind === 'video');
+        const sender = pcRef.current.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
         if (sender) {
           await sender.replaceTrack(screenTrack);
-        } else {
-          // If no sender existed, we add the track. This might require renegotiation
-          // but at least it will send if renegotiation happens.
-          pcRef.current.addTrack(screenTrack, localStreamRef.current || stream);
         }
 
         if (localStreamRef.current) {
@@ -349,7 +356,7 @@ export function useWebRTC(roomId: string) {
         if (trackKind === 'video') newTrack.enabled = isVideoEnabled;
         if (trackKind === 'audio') newTrack.enabled = isAudioEnabled;
         
-        const sender = pcRef.current.getSenders().find(s => s.track?.kind === trackKind);
+        const sender = pcRef.current.getTransceivers().find(t => t.receiver.track.kind === trackKind)?.sender;
         if (sender) {
           await sender.replaceTrack(newTrack);
         }
