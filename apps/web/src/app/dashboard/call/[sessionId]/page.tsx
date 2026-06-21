@@ -330,13 +330,13 @@ export default function VideoCallPage() {
         </div>
 
         {/* Video Area */}
-        <div className="flex-1 relative bg-black/95">
+        <div className="flex-1 relative bg-black/95 overflow-hidden">
           {/* Remote Video (Full Screen) */}
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            className="w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover"
           />
 
           {/* No remote stream placeholder */}
