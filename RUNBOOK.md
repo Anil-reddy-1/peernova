@@ -1,16 +1,15 @@
 # Runbook: Production Operations
 
 ## 1. Deploying
-Deployment is handled automatically by GitHub Actions on push to `main`.
-- Web: Auto-deploys via Vercel GitHub App.
-- API: `./.github/workflows/deploy-api.yml` deploys to Cloud Run.
-- AI: `./.github/workflows/deploy-ai.yml` deploys to Cloud Run.
+Deployment is handled automatically by GitHub Actions or direct integrations on push to `main`.
+- **Frontend**: Auto-deploys via Vercel (link your repository and set the root directory to `frontend/`).
+- **Backend (API & AI logic)**: `./.github/workflows/deploy-api.yml` deploys the `backend/` directory to Cloud Run.
 
 ## 2. Model Retraining
 The AI recommendation model should be retrained periodically to incorporate new user interactions.
 Command:
 ```bash
-curl -X POST https://ai-service-url/api/v1/retrain-model -H "X-Internal-Secret: YOUR_SECRET"
+curl -X POST https://api-service-url/api/v1/ai/retrain-model -H "X-Internal-Secret: YOUR_SECRET"
 ```
 
 ## 3. Cost Optimization (Firebase)
