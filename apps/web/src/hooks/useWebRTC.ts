@@ -116,7 +116,7 @@ export function useWebRTC(roomId: string) {
       }
 
       // 3. Create Peer Connection
-      const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
+      const pc = new RTCPeerConnection({ iceServers });
       pcRef.current = pc;
 
       // ─── PC event handlers ───
@@ -134,24 +134,35 @@ export function useWebRTC(roomId: string) {
       };
 
       pc.ontrack = (event) => {
-        console.log(`📹 ontrack: kind=${event.track.kind} readyState=${event.track.readyState}`);
-        setRemoteStream((prev) => {
-          const s = prev || new MediaStream();
-          if (!s.getTrackById(event.track.id)) {
-            s.addTrack(event.track);
-          }
-          // Return NEW MediaStream reference so React re-renders
-          return new MediaStream(s.getTracks());
-        });
+        console.log(`📹 ontrack: kind=${event.track.kind} readyState=${event.track.readyState} streams=${event.streams?.length || 0}`);
+        if (event.streams && event.streams[0]) {
+          // Force a new reference so React re-renders and updates srcObject
+          setRemoteStream(new MediaStream(event.streams[0].getTracks()));
+        } else {
+          setRemoteStream((prev) => {
+            const s = prev || new MediaStream();
+            if (!s.getTrackById(event.track.id)) {
+              s.addTrack(event.track);
+            }
+            return new MediaStream(s.getTracks());
+          });
+        }
       };
 
       pc.onicecandidate = (event) => {
-        if (event.candidate && remoteSocketIdRef.current) {
-          socket.emit('video:ice-candidate', {
-            targetSocketId: remoteSocketIdRef.current,
-            candidate: event.candidate,
-            roomId,
-          });
+        if (event.candidate) {
+          if (remoteSocketIdRef.current) {
+            console.log(`📹 Sending ICE candidate to ${remoteSocketIdRef.current}`);
+            socket.emit('video:ice-candidate', {
+              targetSocketId: remoteSocketIdRef.current,
+              candidate: event.candidate,
+              roomId,
+            });
+          } else {
+            console.warn('📹 ICE candidate generated but remoteSocketIdRef is null!');
+          }
+        } else {
+          console.log('📹 ICE candidate gathering complete');
         }
       };
 
@@ -304,15 +315,20 @@ export function useWebRTC(roomId: string) {
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handleIceCandidate = async ({ candidate }: { candidate: any }) => {
+    const handleIceCandidate = async ({ candidate, senderSocketId }: { candidate: any, senderSocketId: string }) => {
       try {
+        console.log(`📹 video:ice-candidate received from ${senderSocketId}`);
         const pc = pcRef.current;
-        if (!pc) return;
+        if (!pc) {
+          console.warn('📹 Received ICE candidate but PC is null');
+          return;
+        }
 
         if (pc.remoteDescription && pc.remoteDescription.type) {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          console.log('📹 Added ICE candidate successfully');
         } else {
-          // Queue until remoteDescription is set
+          console.log('📹 Queuing ICE candidate (remoteDescription not set yet)');
           pendingCandidatesRef.current.push(candidate);
         }
       } catch (err) {

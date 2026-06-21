@@ -90,6 +90,7 @@ export default function VideoCallPage() {
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream;
+      localVideoRef.current.play().catch(e => console.warn('Local video play failed:', e));
     }
   }, [localStream]);
 
@@ -97,6 +98,7 @@ export default function VideoCallPage() {
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play().catch(e => console.warn('Remote video play failed:', e));
     }
   }, [remoteStream]);
 
