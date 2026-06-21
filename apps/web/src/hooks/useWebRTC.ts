@@ -93,18 +93,19 @@ export function useWebRTC(roomId: string) {
       ];
 
       try {
-        const { data: turnRes } = await apiClient.get('/chat/turn-credentials');
-        if (turnRes?.data?.iceServers && Array.isArray(turnRes.data.iceServers)) {
-          iceServers = turnRes.data.iceServers;
-          const hasTurn = iceServers.some((s: IceServer) => {
-            const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
-            return urls.some(u => u.startsWith('turn:') || u.startsWith('turns:'));
-          });
-          if (hasTurn) {
-            console.log('✅ WebRTC: Got TURN + STUN servers');
-          } else {
-            console.warn('⚠️ WebRTC: STUN-only – cross-network calls may fail');
+        console.log('🔄 Fetching TURN credentials directly from Metered API...');
+        const meteredDomain = 'peernova.metered.live';
+        const apiKey = 'b2e0bac3d267595b22e5ac7d04f53a18435b';
+        
+        const response = await fetch(`https://${meteredDomain}/api/v1/turn/credentials?apiKey=${apiKey}`);
+        if (response.ok) {
+          const meteredServers = await response.json();
+          if (Array.isArray(meteredServers) && meteredServers.length > 0) {
+            iceServers = meteredServers;
+            console.log('✅ Got TURN credentials from Metered API');
           }
+        } else {
+          console.warn(`📹 Metered API returned ${response.status}`);
         }
       } catch (err) {
         console.warn('⚠️ WebRTC: Failed to fetch TURN credentials, using STUN fallback', err);
