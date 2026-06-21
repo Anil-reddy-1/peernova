@@ -115,6 +115,10 @@ export function useWebRTC(roomId: string) {
         return;
       }
 
+      if (iceServers.length > 0) {
+        console.log('📹 Using ICE Servers:', iceServers.map(s => s.urls).flat());
+      }
+      
       // 3. Create Peer Connection
       const pc = new RTCPeerConnection({ iceServers });
       pcRef.current = pc;
@@ -167,16 +171,12 @@ export function useWebRTC(roomId: string) {
       };
 
       // 4. Add local tracks via addTrack (NOT addTransceiver)
-      //    addTrack associates each track with the source stream, so the remote
-      //    peer's ontrack event receives event.streams[0] correctly and the
-      //    browser can properly correlate audio/video into a single remote stream.
       if (stream) {
         stream.getTracks().forEach(track => {
           pc.addTrack(track, stream);
         });
         console.log(`📹 Added ${stream.getTracks().length} local tracks via addTrack`);
       } else {
-        // No local media (permission denied) — still need to receive remote media
         pc.addTransceiver('audio', { direction: 'recvonly' });
         pc.addTransceiver('video', { direction: 'recvonly' });
         console.log('📹 No local media – set up recvonly transceivers');
@@ -191,15 +191,10 @@ export function useWebRTC(roomId: string) {
 
     // ─── Socket signaling handlers ───────────────────────────────
 
-    /**
-     * Fired when another user joins our video room.
-     * WE are the offerer — create offer and send it to them.
-     */
     const handleUserJoined = async ({ socketId, userId }: { socketId: string; userId?: string }) => {
       try {
         console.log(`📹 video:user-joined  socket=${socketId}  uid=${userId ?? '?'}`);
 
-        // Clear any stale state from a previous peer (handles rejoin)
         setRemoteStream(null);
         setRemoteSocketId(socketId);
         remoteSocketIdRef.current = socketId;
@@ -213,10 +208,8 @@ export function useWebRTC(roomId: string) {
 
         makingOfferRef.current = true;
         try {
-          const offer = await pc.createOffer({ iceRestart: true });
+          const offer = await pc.createOffer(); // removed iceRestart
           await pc.setLocalDescription(offer);
-          // Send the description AFTER setLocalDescription — the browser may
-          // have modified the SDP (e.g. munged codec order, added candidates).
           socket.emit('video:offer', {
             targetSocketId: socketId,
             offer: pc.localDescription,
@@ -232,24 +225,13 @@ export function useWebRTC(roomId: string) {
       }
     };
 
-    /**
-     * Fired when WE receive an offer — we are the answerer.
-     * Includes glare handling: if we were also making an offer, roll back.
-     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleOffer = async ({ offer, senderSocketId }: { offer: any; senderSocketId: string }) => {
       try {
         console.log(`📹 video:offer from ${senderSocketId}`);
         const pc = pcRef.current;
-        if (!pc) {
-          console.error('📹 PeerConnection not ready when offer arrived');
-          return;
-        }
+        if (!pc) return;
 
-        // ── Glare handling ──
-        // If we also sent an offer (both peers called createOffer simultaneously),
-        // one side must back down. We always roll back our local offer and accept
-        // the incoming one (the "polite" peer pattern).
         const offerCollision = makingOfferRef.current || pc.signalingState !== 'stable';
         if (offerCollision) {
           console.log('📹 Glare detected — rolling back local offer');
@@ -265,10 +247,18 @@ export function useWebRTC(roomId: string) {
         console.log(`📹 Remote offer set  signalingState=${pc.signalingState}`);
 
         // Flush queued ICE candidates
-        for (const c of pendingCandidatesRef.current) {
-          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch { /* stale candidate */ }
+        if (pendingCandidatesRef.current.length > 0) {
+          console.log(`📹 Flushing ${pendingCandidatesRef.current.length} queued ICE candidates`);
+          for (const c of pendingCandidatesRef.current) {
+            try { 
+              await pc.addIceCandidate(new RTCIceCandidate(c)); 
+              console.log('📹 Added queued ICE candidate successfully');
+            } catch (e) { 
+              console.error('📹 Failed to add queued ICE candidate', e);
+            }
+          }
+          pendingCandidatesRef.current = [];
         }
-        pendingCandidatesRef.current = [];
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -283,18 +273,12 @@ export function useWebRTC(roomId: string) {
       }
     };
 
-    /**
-     * Fired when the remote peer accepts our offer.
-     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleAnswer = async ({ answer }: { answer: any }) => {
       try {
         console.log('📹 video:answer received');
         const pc = pcRef.current;
-        if (!pc) {
-          console.error('📹 PeerConnection not ready when answer arrived');
-          return;
-        }
+        if (!pc) return;
 
         if (pc.signalingState !== 'have-local-offer') {
           console.warn(`📹 Ignoring stale answer (signalingState=${pc.signalingState})`);
@@ -305,10 +289,18 @@ export function useWebRTC(roomId: string) {
         console.log(`📹 Remote answer set  signalingState=${pc.signalingState}`);
 
         // Flush queued ICE candidates
-        for (const c of pendingCandidatesRef.current) {
-          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch { /* stale candidate */ }
+        if (pendingCandidatesRef.current.length > 0) {
+          console.log(`📹 Flushing ${pendingCandidatesRef.current.length} queued ICE candidates`);
+          for (const c of pendingCandidatesRef.current) {
+            try { 
+              await pc.addIceCandidate(new RTCIceCandidate(c)); 
+              console.log('📹 Added queued ICE candidate successfully');
+            } catch (e) { 
+              console.error('📹 Failed to add queued ICE candidate', e);
+            }
+          }
+          pendingCandidatesRef.current = [];
         }
-        pendingCandidatesRef.current = [];
       } catch (err) {
         console.error('📹 handleAnswer error:', err);
       }
