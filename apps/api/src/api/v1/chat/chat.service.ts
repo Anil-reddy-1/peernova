@@ -5,6 +5,10 @@ const FieldValue = getFieldValue();
 import { NotFoundError } from '../../../lib/errors';
 
 export class ChatService {
+  // In-memory cache for the Metered API key obtained via secretKey
+  private cachedApiKey: string | null = null;
+  private cachedApiKeyExpiry: number = 0;
+
   async getTurnCredentials(_userId: string) {
     const domain = process.env.METERED_DOMAIN;
     const secretKey = process.env.METERED_SECRET_KEY;
@@ -19,12 +23,22 @@ export class ChatService {
     if (!staticUsername && !credentialApiKey && !secretKey) {
       console.error('🚨 WebRTC CRITICAL: Missing Metered Auth! You must provide METERED_API_KEY, METERED_STATIC_USERNAME/PASSWORD, or METERED_SECRET_KEY.');
     }
-    if (secretKey && !credentialApiKey && !staticUsername) {
-      console.warn('⚠️ WebRTC WARNING: Using METERED_SECRET_KEY will dynamically create new credentials and quickly exhaust the Free Tier limit. We strongly recommend setting METERED_API_KEY instead.');
-    }
+
+    // Helper: fetch with timeout to avoid hanging requests
+    const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeoutMs = 8000) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...options, signal: controller.signal });
+        return res;
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
     // 1. Use static credentials if provided (fastest, no API call needed)
     if (domain && staticUsername && staticPassword) {
+      console.log('✅ WebRTC: Using static TURN credentials');
       return {
         iceServers: [
           { urls: `stun:${domain}:80` },
@@ -38,61 +52,86 @@ export class ChatService {
     // 2. Fetch using an existing static credential API Key (bypasses creation limits)
     if (domain && credentialApiKey) {
       try {
-        const turnRes = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${credentialApiKey}`);
+        console.log('🔄 WebRTC: Fetching TURN credentials using METERED_API_KEY...');
+        const turnRes = await fetchWithTimeout(`https://${domain}/api/v1/turn/credentials?apiKey=${credentialApiKey}`);
         if (turnRes.ok) {
-          const iceServers = await turnRes.json();
+          const iceServers = (await turnRes.json()) as any[];
+          console.log(`✅ WebRTC: Got ${iceServers.length} ICE servers from Metered API key`);
           return { iceServers };
         } else {
-          console.error(`🚨 WebRTC CRITICAL: Failed to fetch TURN credentials with API Key. Metered returned ${turnRes.status} ${turnRes.statusText}`);
+          const body = await turnRes.text().catch(() => '');
+          console.error(`🚨 WebRTC CRITICAL: METERED_API_KEY fetch failed: ${turnRes.status} ${turnRes.statusText} - ${body}`);
         }
-      } catch (e) {
-        console.error('🚨 WebRTC CRITICAL: Failed to fetch static API key credentials:', e);
+      } catch (e: any) {
+        console.error('🚨 WebRTC CRITICAL: Failed to fetch TURN credentials with API key:', e.message);
       }
     }
 
-    if (!domain || !secretKey) {
-      // Fallback to public STUN only
-      return {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-        ],
-      };
+    // 3. Use secretKey to get/reuse an API key (caches to avoid exhausting free tier)
+    if (domain && secretKey) {
+      try {
+        let apiKey = this.cachedApiKey;
+
+        // Only create a new credential if we don't have a cached one or it expired
+        // Cache for 23 hours (Metered credentials are valid for 24h)
+        if (!apiKey || Date.now() > this.cachedApiKeyExpiry) {
+          console.log('🔄 WebRTC: Creating new TURN credential via METERED_SECRET_KEY (will be cached)...');
+          const createRes = await fetchWithTimeout(
+            `https://${domain}/api/v1/turn/credential?secretKey=${secretKey}`,
+            { method: 'POST' }
+          );
+
+          if (!createRes.ok) {
+            const body = await createRes.text().catch(() => '');
+            console.error(`🚨 WebRTC CRITICAL: Failed to create TURN credential: ${createRes.status} ${createRes.statusText} - ${body}`);
+            console.error('🚨 This usually means the Metered free tier credential limit is exhausted.');
+            console.error('🚨 FIX: Go to https://dashboard.metered.ca → TURN Servers → Your App → API Key, and set METERED_API_KEY in your .env.local');
+            throw new Error(`Metered credential creation failed: ${createRes.status} - ${body}`);
+          }
+
+          const result = (await createRes.json()) as any;
+          apiKey = result.apiKey;
+          this.cachedApiKey = apiKey;
+          // Cache for 23 hours
+          this.cachedApiKeyExpiry = Date.now() + 23 * 60 * 60 * 1000;
+          console.log('✅ WebRTC: Created and cached new TURN API key');
+        } else {
+          console.log('✅ WebRTC: Using cached TURN API key');
+        }
+
+        // Fetch the full iceServers array using the API key
+        const turnRes = await fetchWithTimeout(
+          `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`
+        );
+
+        if (!turnRes.ok) {
+          const body = await turnRes.text().catch(() => '');
+          // If cached key is stale, clear it and retry once
+          if (this.cachedApiKey === apiKey) {
+            this.cachedApiKey = null;
+            this.cachedApiKeyExpiry = 0;
+          }
+          throw new Error(`Metered credentials fetch failed: ${turnRes.status} - ${body}`);
+        }
+
+        const iceServers = (await turnRes.json()) as any[];
+        console.log(`✅ WebRTC: Got ${iceServers.length} ICE servers from Metered`);
+        return { iceServers };
+      } catch (err: any) {
+        console.error('🚨 WebRTC: TURN credential flow failed:', err.message);
+        console.error('🚨 Falling back to STUN-only. Video calls will NOT work across different networks!');
+      }
     }
 
-    try {
-      // First generate a temporary credential using the secretKey
-      const createRes = await fetch(
-        `https://${domain}/api/v1/turn/credential?secretKey=${secretKey}`,
-        { method: 'POST' }
-      );
-
-      if (!createRes.ok) {
-        throw new Error(`Metered API error: ${createRes.status} ${createRes.statusText}`);
-      }
-
-      const { apiKey } = (await createRes.json()) as any;
-
-      // Then fetch the full iceServers array using the generated apiKey
-      const turnRes = await fetch(
-        `https://${domain}/api/v1/turn/credentials?apiKey=${apiKey}`
-      );
-
-      if (!turnRes.ok) {
-        throw new Error(`Metered API error: ${turnRes.status} ${turnRes.statusText}`);
-      }
-
-      const iceServers = await turnRes.json();
-      return { iceServers };
-    } catch (err) {
-      console.warn('Failed to fetch TURN credentials, falling back to STUN:', err);
-      return {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-        ],
-      };
-    }
+    // 4. Final fallback: public STUN only (same-network only!)
+    console.warn('⚠️ WebRTC WARNING: Using STUN-only fallback. Calls across different networks will FAIL!');
+    console.warn('⚠️ To fix: Set METERED_API_KEY in your .env.local (get it from https://dashboard.metered.ca)');
+    return {
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    };
   }
 
   async createRoom(userId: string, participantId: string, _initialMessage?: string) {

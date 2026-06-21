@@ -351,9 +351,14 @@ export default function VideoCallPage() {
                 </div>
               )}
               {connectionState === 'failed' && (
-                <div className="flex items-center gap-2 mt-3 text-red-400 text-sm">
-                  <WifiOff size={14} />
-                  Connection failed. Try refreshing.
+                <div className="flex flex-col items-center gap-2 mt-3 text-red-400 text-sm max-w-xs text-center">
+                  <div className="flex items-center gap-2">
+                    <WifiOff size={14} />
+                    Connection failed
+                  </div>
+                  <p className="text-xs text-red-400/70">
+                    If you&apos;re on different networks, this may be a TURN server issue. Try refreshing or contact support.
+                  </p>
                 </div>
               )}
               {connectionState === 'disconnected' && (

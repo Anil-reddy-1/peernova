@@ -95,9 +95,18 @@ export function useWebRTC(roomId: string) {
         const { data: turnRes } = await apiClient.get('/chat/turn-credentials');
         if (turnRes?.data?.iceServers && Array.isArray(turnRes.data.iceServers)) {
           iceServers = turnRes.data.iceServers;
+          const hasTurn = iceServers.some((s: IceServer) => {
+            const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+            return urls.some(u => u.startsWith('turn:') || u.startsWith('turns:'));
+          });
+          if (hasTurn) {
+            console.log('✅ WebRTC: Got TURN + STUN servers - cross-network calls will work');
+          } else {
+            console.warn('⚠️ WebRTC: Only got STUN servers - calls across different networks may fail!');
+          }
         }
       } catch (err) {
-        console.warn('Failed to fetch TURN credentials, using STUN fallback', err);
+        console.warn('⚠️ WebRTC: Failed to fetch TURN credentials, using STUN fallback. Cross-network calls will fail!', err);
       }
 
       if (cancelled) {
@@ -118,7 +127,18 @@ export function useWebRTC(roomId: string) {
       pc.onconnectionstatechange = () => {
         setConnectionState(pc.connectionState);
         if (pc.connectionState === 'failed') {
-          console.error('WebRTC connection failed – may need TURN server');
+          console.error('🚨 WebRTC connection failed. If users are on different networks, this is likely because TURN server credentials are missing or invalid.');
+        }
+      };
+
+      pc.onicegatheringstatechange = () => {
+        console.log(`ICE gathering state: ${pc.iceGatheringState}`);
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`ICE connection state: ${pc.iceConnectionState}`);
+        if (pc.iceConnectionState === 'failed') {
+          console.error('🚨 ICE connection failed - no viable network path found. TURN server is required for cross-network calls.');
         }
       };
 
