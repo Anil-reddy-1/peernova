@@ -29,6 +29,7 @@ export function useWebRTC(roomId: string) {
   const remoteSocketIdRef = useRef<string | null>(null);
   const toggleScreenShareRef = useRef<(() => void) | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const makingOfferRef = useRef(false);
 
   // ─── Initialize Media and WebRTC Peer Connection ───
   useEffect(() => {
@@ -100,13 +101,13 @@ export function useWebRTC(roomId: string) {
             return urls.some(u => u.startsWith('turn:') || u.startsWith('turns:'));
           });
           if (hasTurn) {
-            console.log('✅ WebRTC: Got TURN + STUN servers - cross-network calls will work');
+            console.log('✅ WebRTC: Got TURN + STUN servers');
           } else {
-            console.warn('⚠️ WebRTC: Only got STUN servers - calls across different networks may fail!');
+            console.warn('⚠️ WebRTC: STUN-only – cross-network calls may fail');
           }
         }
       } catch (err) {
-        console.warn('⚠️ WebRTC: Failed to fetch TURN credentials, using STUN fallback. Cross-network calls will fail!', err);
+        console.warn('⚠️ WebRTC: Failed to fetch TURN credentials, using STUN fallback', err);
       }
 
       if (cancelled) {
@@ -115,40 +116,32 @@ export function useWebRTC(roomId: string) {
       }
 
       // 3. Create Peer Connection
-      const config: RTCConfiguration = {
-        iceServers,
-        iceCandidatePoolSize: 10,
-      };
-
-      const pc = new RTCPeerConnection(config);
+      const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 });
       pcRef.current = pc;
 
-      // Track connection state
+      // ─── PC event handlers ───
       pc.onconnectionstatechange = () => {
+        console.log(`📹 connectionState → ${pc.connectionState}`);
         setConnectionState(pc.connectionState);
-        if (pc.connectionState === 'failed') {
-          console.error('🚨 WebRTC connection failed. If users are on different networks, this is likely because TURN server credentials are missing or invalid.');
-        }
-      };
-
-      pc.onicegatheringstatechange = () => {
-        console.log(`ICE gathering state: ${pc.iceGatheringState}`);
       };
 
       pc.oniceconnectionstatechange = () => {
-        console.log(`ICE connection state: ${pc.iceConnectionState}`);
-        if (pc.iceConnectionState === 'failed') {
-          console.error('🚨 ICE connection failed - no viable network path found. TURN server is required for cross-network calls.');
-        }
+        console.log(`📹 iceConnectionState → ${pc.iceConnectionState}`);
+      };
+
+      pc.onsignalingstatechange = () => {
+        console.log(`📹 signalingState → ${pc.signalingState}`);
       };
 
       pc.ontrack = (event) => {
+        console.log(`📹 ontrack: kind=${event.track.kind} readyState=${event.track.readyState}`);
         setRemoteStream((prev) => {
-          const stream = prev || new MediaStream();
-          if (!stream.getTracks().includes(event.track)) {
-            stream.addTrack(event.track);
+          const s = prev || new MediaStream();
+          if (!s.getTrackById(event.track.id)) {
+            s.addTrack(event.track);
           }
-          return new MediaStream(stream.getTracks());
+          // Return NEW MediaStream reference so React re-renders
+          return new MediaStream(s.getTracks());
         });
       };
 
@@ -162,99 +155,181 @@ export function useWebRTC(roomId: string) {
         }
       };
 
-      // 4. Setup transceivers BEFORE signaling to guarantee connection establishes
-      // even if user has no camera/microphone (e.g. permission denied or Device In Use)
-      const audioTransceiver = pc.addTransceiver('audio', { direction: 'sendrecv' });
-      const videoTransceiver = pc.addTransceiver('video', { direction: 'sendrecv' });
-
+      // 4. Add local tracks via addTrack (NOT addTransceiver)
+      //    addTrack associates each track with the source stream, so the remote
+      //    peer's ontrack event receives event.streams[0] correctly and the
+      //    browser can properly correlate audio/video into a single remote stream.
       if (stream) {
-        const audioTrack = stream.getAudioTracks()[0];
-        const videoTrack = stream.getVideoTracks()[0];
-        if (audioTrack) audioTransceiver.sender.replaceTrack(audioTrack);
-        if (videoTrack) videoTransceiver.sender.replaceTrack(videoTrack);
+        stream.getTracks().forEach(track => {
+          pc.addTrack(track, stream);
+        });
+        console.log(`📹 Added ${stream.getTracks().length} local tracks via addTrack`);
+      } else {
+        // No local media (permission denied) — still need to receive remote media
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+        pc.addTransceiver('video', { direction: 'recvonly' });
+        console.log('📹 No local media – set up recvonly transceivers');
       }
 
       // 5. Join the signaling room
       socket.emit('video:join', roomId);
+      console.log(`📹 Emitted video:join for room ${roomId}`);
     };
 
     init();
 
-    // ─── Socket event handlers ───
-    const handleUserJoined = async ({ socketId }: { socketId: string }) => {
-      setRemoteSocketId(socketId);
-      remoteSocketIdRef.current = socketId;
-      if (pcRef.current) {
-        const offer = await pcRef.current.createOffer({ iceRestart: true });
-        await pcRef.current.setLocalDescription(offer);
-        socket.emit('video:offer', { targetSocketId: socketId, offer, roomId });
+    // ─── Socket signaling handlers ───────────────────────────────
+
+    /**
+     * Fired when another user joins our video room.
+     * WE are the offerer — create offer and send it to them.
+     */
+    const handleUserJoined = async ({ socketId, userId }: { socketId: string; userId?: string }) => {
+      try {
+        console.log(`📹 video:user-joined  socket=${socketId}  uid=${userId ?? '?'}`);
+
+        // Clear any stale state from a previous peer (handles rejoin)
+        setRemoteStream(null);
+        setRemoteSocketId(socketId);
+        remoteSocketIdRef.current = socketId;
+        pendingCandidatesRef.current = [];
+
+        const pc = pcRef.current;
+        if (!pc) {
+          console.error('📹 PeerConnection not ready when user joined');
+          return;
+        }
+
+        makingOfferRef.current = true;
+        try {
+          const offer = await pc.createOffer({ iceRestart: true });
+          await pc.setLocalDescription(offer);
+          // Send the description AFTER setLocalDescription — the browser may
+          // have modified the SDP (e.g. munged codec order, added candidates).
+          socket.emit('video:offer', {
+            targetSocketId: socketId,
+            offer: pc.localDescription,
+            roomId,
+          });
+          console.log('📹 Offer sent');
+        } finally {
+          makingOfferRef.current = false;
+        }
+      } catch (err) {
+        makingOfferRef.current = false;
+        console.error('📹 handleUserJoined error:', err);
       }
     };
 
+    /**
+     * Fired when WE receive an offer — we are the answerer.
+     * Includes glare handling: if we were also making an offer, roll back.
+     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleOffer = async ({ offer, senderSocketId }: { offer: any; senderSocketId: string }) => {
-      setRemoteSocketId(senderSocketId);
-      remoteSocketIdRef.current = senderSocketId;
-      if (pcRef.current) {
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(offer));
-        
-        // Flush pending candidates
-        while (pendingCandidatesRef.current.length > 0) {
-          const candidate = pendingCandidatesRef.current.shift();
-          if (candidate) {
-            try {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (e) {
-              console.error('Failed to add queued candidate', e);
-            }
-          }
+      try {
+        console.log(`📹 video:offer from ${senderSocketId}`);
+        const pc = pcRef.current;
+        if (!pc) {
+          console.error('📹 PeerConnection not ready when offer arrived');
+          return;
         }
 
-        const answer = await pcRef.current.createAnswer();
-        await pcRef.current.setLocalDescription(answer);
-        socket.emit('video:answer', { targetSocketId: senderSocketId, answer, roomId });
+        // ── Glare handling ──
+        // If we also sent an offer (both peers called createOffer simultaneously),
+        // one side must back down. We always roll back our local offer and accept
+        // the incoming one (the "polite" peer pattern).
+        const offerCollision = makingOfferRef.current || pc.signalingState !== 'stable';
+        if (offerCollision) {
+          console.log('📹 Glare detected — rolling back local offer');
+          await Promise.all([
+            pc.setLocalDescription({ type: 'rollback' }),
+          ]);
+        }
+
+        setRemoteSocketId(senderSocketId);
+        remoteSocketIdRef.current = senderSocketId;
+
+        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        console.log(`📹 Remote offer set  signalingState=${pc.signalingState}`);
+
+        // Flush queued ICE candidates
+        for (const c of pendingCandidatesRef.current) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch { /* stale candidate */ }
+        }
+        pendingCandidatesRef.current = [];
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('video:answer', {
+          targetSocketId: senderSocketId,
+          answer: pc.localDescription,
+          roomId,
+        });
+        console.log(`📹 Answer sent  signalingState=${pc.signalingState}`);
+      } catch (err) {
+        console.error('📹 handleOffer error:', err);
       }
     };
 
+    /**
+     * Fired when the remote peer accepts our offer.
+     */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleAnswer = async ({ answer }: { answer: any }) => {
-      if (pcRef.current) {
-        await pcRef.current.setRemoteDescription(new RTCSessionDescription(answer));
-        
-        // Flush pending candidates
-        while (pendingCandidatesRef.current.length > 0) {
-          const candidate = pendingCandidatesRef.current.shift();
-          if (candidate) {
-            try {
-              await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-            } catch (e) {
-              console.error('Failed to add queued candidate', e);
-            }
-          }
+      try {
+        console.log('📹 video:answer received');
+        const pc = pcRef.current;
+        if (!pc) {
+          console.error('📹 PeerConnection not ready when answer arrived');
+          return;
         }
+
+        if (pc.signalingState !== 'have-local-offer') {
+          console.warn(`📹 Ignoring stale answer (signalingState=${pc.signalingState})`);
+          return;
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log(`📹 Remote answer set  signalingState=${pc.signalingState}`);
+
+        // Flush queued ICE candidates
+        for (const c of pendingCandidatesRef.current) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch { /* stale candidate */ }
+        }
+        pendingCandidatesRef.current = [];
+      } catch (err) {
+        console.error('📹 handleAnswer error:', err);
       }
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handleIceCandidate = async ({ candidate }: { candidate: any }) => {
-      if (pcRef.current) {
-        if (pcRef.current.remoteDescription) {
-          try {
-            await pcRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-          } catch (err) {
-            console.error('Failed to add ICE candidate', err);
-          }
+      try {
+        const pc = pcRef.current;
+        if (!pc) return;
+
+        if (pc.remoteDescription && pc.remoteDescription.type) {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } else {
-          // Queue candidate if remote description is not set yet
+          // Queue until remoteDescription is set
           pendingCandidatesRef.current.push(candidate);
         }
+      } catch (err) {
+        console.error('📹 ICE candidate error:', err);
       }
     };
 
-    const handleUserLeft = () => {
-      setRemoteStream(null);
-      setRemoteSocketId(null);
-      remoteSocketIdRef.current = null;
+    const handleUserLeft = ({ socketId }: { socketId: string }) => {
+      console.log(`📹 video:user-left  socket=${socketId}`);
+      // Only react if the leaving user is our current peer
+      if (remoteSocketIdRef.current === socketId || !remoteSocketIdRef.current) {
+        setRemoteStream(null);
+        setRemoteSocketId(null);
+        remoteSocketIdRef.current = null;
+        pendingCandidatesRef.current = [];
+        setConnectionState('new');
+      }
     };
 
     socket.on('video:user-joined', handleUserJoined);
@@ -271,6 +346,9 @@ export function useWebRTC(roomId: string) {
       socket.off('video:ice-candidate', handleIceCandidate);
       socket.off('video:user-left', handleUserLeft);
 
+      // ── Tell the server / remote peer we are leaving ──
+      socket.emit('video:leave', roomId);
+
       if (localStreamToCleanup) {
         localStreamToCleanup.getTracks().forEach((track) => track.stop());
       }
@@ -278,8 +356,12 @@ export function useWebRTC(roomId: string) {
         pcRef.current.close();
         pcRef.current = null;
       }
+      pendingCandidatesRef.current = [];
+      remoteSocketIdRef.current = null;
+      makingOfferRef.current = false;
       setLocalStream(null);
       setRemoteStream(null);
+      setConnectionState('new');
     };
   }, [socket, isConnected, roomId]);
 
@@ -325,7 +407,6 @@ export function useWebRTC(roomId: string) {
           localStreamRef.current.getVideoTracks().forEach((t) => t.stop());
           localStreamRef.current.getVideoTracks().forEach((t) => localStreamRef.current!.removeTrack(t));
           if (videoTrack) localStreamRef.current.addTrack(videoTrack);
-          // Create new stream object to force React re-render
           setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
         } else {
           localStreamRef.current = stream;
@@ -345,7 +426,7 @@ export function useWebRTC(roomId: string) {
           }
         };
 
-        const sender = pcRef.current.getTransceivers().find(t => t.receiver.track.kind === 'video')?.sender;
+        const sender = pcRef.current.getSenders().find(s => s.track?.kind === 'video');
         if (sender) {
           await sender.replaceTrack(screenTrack);
         }
@@ -354,7 +435,6 @@ export function useWebRTC(roomId: string) {
           localStreamRef.current.getVideoTracks().forEach((t) => t.stop());
           localStreamRef.current.getVideoTracks().forEach((t) => localStreamRef.current!.removeTrack(t));
           localStreamRef.current.addTrack(screenTrack);
-          // Create new stream object to force React re-render
           setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
         } else {
           localStreamRef.current = stream;
@@ -366,7 +446,7 @@ export function useWebRTC(roomId: string) {
     } catch (err) {
       console.error('Failed to toggle screen share', err);
     }
-  }, [isScreenSharing, isAudioEnabled]);
+  }, [isScreenSharing, isAudioEnabled, selectedVideoDeviceId]);
 
   useEffect(() => {
     toggleScreenShareRef.current = toggleScreenShare;
@@ -375,7 +455,6 @@ export function useWebRTC(roomId: string) {
   const switchDevice = useCallback(async (kind: 'videoinput' | 'audioinput', deviceId: string) => {
     if (!pcRef.current || !localStreamRef.current) return;
     
-    // If currently screen sharing and switching camera, just save the ID for when screen sharing ends
     if (kind === 'videoinput' && isScreenSharing) {
       setSelectedVideoDeviceId(deviceId);
       return;
@@ -392,7 +471,7 @@ export function useWebRTC(roomId: string) {
       const trackKind = kind === 'videoinput' ? 'video' : 'audio';
       const oldTrack = localStreamRef.current.getTracks().find(t => t.kind === trackKind);
       
-      // Stop the old track first to release the hardware lock (fixes NotReadableError on some OS)
+      // Stop the old track first to release the hardware lock
       if (oldTrack) {
         oldTrack.stop();
         localStreamRef.current.removeTrack(oldTrack);
@@ -403,11 +482,10 @@ export function useWebRTC(roomId: string) {
       
       if (newTrack) {
         localStreamRef.current.addTrack(newTrack);
-        // Ensure track enabled state matches current UI state
         if (trackKind === 'video') newTrack.enabled = isVideoEnabled;
         if (trackKind === 'audio') newTrack.enabled = isAudioEnabled;
         
-        const sender = pcRef.current.getTransceivers().find(t => t.receiver.track.kind === trackKind)?.sender;
+        const sender = pcRef.current.getSenders().find(s => s.track?.kind === trackKind);
         if (sender) {
           await sender.replaceTrack(newTrack);
         }

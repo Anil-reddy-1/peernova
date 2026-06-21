@@ -100,6 +100,13 @@ export function initializeSocket(httpServer: HttpServer): void {
       socket.join(`video:${roomId}`);
       // Notify others in the video room
       socket.to(`video:${roomId}`).emit('video:user-joined', { userId: user.uid, socketId: socket.id });
+      logger.info({ uid: user.uid, roomId, socketId: socket.id }, 'User joined video room');
+    });
+
+    socket.on('video:leave', (roomId: string) => {
+      socket.to(`video:${roomId}`).emit('video:user-left', { userId: user.uid, socketId: socket.id });
+      socket.leave(`video:${roomId}`);
+      logger.info({ uid: user.uid, roomId, socketId: socket.id }, 'User left video room');
     });
 
     socket.on('video:offer', (data: { targetSocketId: string, offer: any, roomId: string }) => {
